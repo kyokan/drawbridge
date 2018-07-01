@@ -1,0 +1,6 @@
+**/node_modules
+**/build
+pkg/contracts/**
+!pkg/contracts/.keep
+vendor
+local-config.yml
