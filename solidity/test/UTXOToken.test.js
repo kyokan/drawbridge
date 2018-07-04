@@ -470,10 +470,6 @@ contract('UTXOToken', (accounts) => {
     buf.write(strip0x(inputB.id), 32, 32, 'hex');
     buf.write(strip0x(accounts[0]), 64, 20, 'hex');
     buf.write(strip0x(accounts[1]), 84, 20, 'hex');
-
-    console.log(buf.toString('hex'));
-    console.log(sha256(buf));
-
     return sha256(buf);
   }
 });

@@ -36,6 +36,7 @@
 [[constraint]]
   name = "github.com/ethereum/go-ethereum"
   version = "1.8.11"
+
 [[constraint]]
   name = "github.com/gorilla/rpc"
   version = "1.1.0"
@@ -43,3 +44,7 @@
 [[constraint]]
   name = "go.uber.org/zap"
   version = "1.8.0"
+
+[[constraint]]
+  name = "github.com/lightningnetwork/lnd"
+  revision = "23b1678266fc026540f3c31f3f94c4c9b36e1e39"

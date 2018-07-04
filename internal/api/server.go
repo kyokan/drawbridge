@@ -17,7 +17,7 @@ func init() {
 }
 
 func Start(container *ServiceContainer, addr string, port string) {
-	sLog.Infow("starting services", "listen-ip", addr, "listen-port", port)
+	sLog.Infow("starting rpc server", "rpcIp", addr, "rpcPort", port)
 	s := rpc.NewServer()
 	s.RegisterCodec(json.NewCodec(), "application/json")
 	container.RegisterServices(s)

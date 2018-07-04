@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 	"github.com/kyokan/drawbridge/internal/api"
 	"github.com/kyokan/drawbridge/internal/logger"
+	"github.com/kyokan/drawbridge/internal/p2p"
 )
 
 var log *zap.SugaredLogger
@@ -41,8 +42,16 @@ func Start() {
 		FundingService: api.NewFundingService(client),
 	}
 
+	reactor := p2p.NewReactor()
+
+	go reactor.Run()
+
 	go (func() {
-		api.Start(container, stringFlag("listen-ip"), stringFlag("listen-port"))
+		api.Start(container, stringFlag("rpc-ip"), stringFlag("rpc-port"))
+	})()
+
+	go(func() {
+		p2p.StartNode(reactor, stringFlag("p2p-ip"), stringFlag("p2p-port"), viper.GetStringSlice("bootstrap-peers"))
 	})()
 
 	log.Info("started")
