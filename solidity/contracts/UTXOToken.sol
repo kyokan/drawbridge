@@ -62,7 +62,7 @@ contract UTXOToken {
 
     event Withdrawal(address owner, uint value, bytes32 id);
 
-    event Output(address owner, uint value, bytes32 id);
+    event Output(bytes32 inputId, address owner, uint value, bytes32 id);
 
     event MultisigOutput(address signerA, address signerB, uint valueA, uint valueB, bytes32 id);
 
@@ -90,7 +90,7 @@ contract UTXOToken {
         UTXO memory utxo = makeUTXO(owner, value, bytes32(0));
         utxos[utxo.id] = utxo;
         emit Deposit(owner, value, utxo.id);
-        emit Output(owner, value, utxo.id);
+        emit Output(ZERO_BYTES32, owner, value, utxo.id);
     }
 
     function withdraw(bytes32 id) public {
@@ -124,10 +124,10 @@ contract UTXOToken {
 
         delete utxos[input.id];
 
-        emit Output(spent.owner, spent.value, spent.id);
+        emit Output(input.id, spent.owner, spent.value, spent.id);
 
         if (change.exists) {
-            emit Output(change.owner, change.value, change.id);
+            emit Output(input.id, change.owner, change.value, change.id);
         }
     }
 
@@ -206,7 +206,7 @@ contract UTXOToken {
         multisigs[challenger.id] = challenger;
         delete multisigs[multisig.id];
         
-        emit Output(utxo.owner, utxo.value, utxo.id);
+        emit Output(multisig.id, utxo.owner, utxo.value, utxo.id);
         emit MultisigOutput(challenger.signerA, challenger.signerB, challenger.valueA, challenger.valueB, challenger.id);
     }
 
@@ -246,7 +246,7 @@ contract UTXOToken {
             UTXO memory breach = makeUTXO(msg.sender, total, multisig.id);
             utxos[breach.id] = breach;
             delete multisigs[multisig.id];
-            emit Output(breach.owner, breach.value, breach.id);
+            emit Output(multisig.id, breach.owner, breach.value, breach.id);
             emit Breach(breacher, multisig.id);
             return;
         }
@@ -290,11 +290,11 @@ contract UTXOToken {
         delete multisigs[multisig.id];
 
         if (utxoA.exists) {
-            emit Output(utxoA.owner, utxoA.value, utxoA.id);
+            emit Output(multisig.id, utxoA.owner, utxoA.value, utxoA.id);
         }
 
         if (utxoB.exists) {
-            emit Output(utxoB.owner, utxoB.value, utxoB.id);
+            emit Output(multisig.id, utxoB.owner, utxoB.value, utxoB.id);
         }
     }
 

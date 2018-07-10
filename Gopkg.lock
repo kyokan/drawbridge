@@ -123,6 +123,15 @@
   version = "v1.0"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/lib/pq"
+  packages = [
+    ".",
+    "oid"
+  ]
+  revision = "90697d60dd844d5ef6ff15135d0203f65d2f53b8"
+
+[[projects]]
   name = "github.com/lightningnetwork/lnd"
   packages = [
     "lnwire",
@@ -362,6 +371,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "c06c1ecee71aa6f58a47e84c23d338b88407399bfdc73e0b654f8e24993e4688"
+  inputs-digest = "98d0e0fa521e700ac37f8bf57a29c23e459ec30e0723893ffb9323988ecdb3f4"
   solver-name = "gps-cdcl"
   solver-version = 1

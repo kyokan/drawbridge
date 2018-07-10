@@ -3,15 +3,17 @@ package p2p
 import (
 	"sync"
 	"github.com/lightningnetwork/lnd/lnwire"
-	"github.com/kyokan/drawbridge/internal/p2p/msghandler"
+	"go.uber.org/zap"
+	"github.com/kyokan/drawbridge/internal/logger"
 )
 
 type Reactor struct {
-	chans map[uint64]*reactorChannel
-	toAdd map[uint64]*reactorChannel
+	chans    map[uint64]*reactorChannel
+	toAdd    map[uint64]*reactorChannel
 	toRemove []uint64
-	id    uint64
-	mut   *sync.Mutex
+	id       uint64
+	mut      *sync.Mutex
+	handlers *Handlers
 }
 
 type reactorChannel struct {
@@ -19,13 +21,20 @@ type reactorChannel struct {
 	out chan *Envelope
 }
 
-func NewReactor() *Reactor {
+var rLog *zap.SugaredLogger
+
+func init() {
+	rLog = logger.Logger.Named("reactor")
+}
+
+func NewReactor(handlers *Handlers) *Reactor {
 	return &Reactor{
-		chans: make(map[uint64]*reactorChannel),
-		toAdd: make(map[uint64]*reactorChannel),
+		chans:    make(map[uint64]*reactorChannel),
+		toAdd:    make(map[uint64]*reactorChannel),
 		toRemove: make([]uint64, 10),
-		id:    0,
-		mut:   new(sync.Mutex),
+		id:       0,
+		mut:      new(sync.Mutex),
+		handlers: handlers,
 	}
 }
 
@@ -49,7 +58,7 @@ func (r *Reactor) Run() {
 
 		for _, ch := range r.chans {
 			select {
-			case in := <- ch.in:
+			case in := <-ch.in:
 				res := r.handle(in)
 
 				if res != nil {
@@ -81,10 +90,19 @@ func (r *Reactor) handle(envelope *Envelope) lnwire.Message {
 	msg := envelope.Msg
 
 	var res lnwire.Message
+	var err error
 
 	switch msg.MsgType() {
 	case lnwire.MsgPing:
-		res = msghandler.HandlePing(msg.(*lnwire.Ping))
+		res, err = r.handlers.Ping.HandlePing(msg.(*lnwire.Ping))
+	case lnwire.MsgOpenChannel:
+		res, err = r.handlers.ChannelEstablishment.HandleOpenChannel(envelope.Peer, msg.(*lnwire.OpenChannel))
+	}
+
+	if err != nil {
+		rLog.Warnw("caught error processing message", "msgType", msg.MsgType().String(),
+			"err", err.Error())
+		return nil
 	}
 
 	return res

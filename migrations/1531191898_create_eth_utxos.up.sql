@@ -1,0 +1,10 @@
+CREATE TABLE eth_utxos (
+  id VARCHAR NOT NULL PRIMARY KEY,
+  input_id VARCHAR NOT NULL,
+  value DECIMAL(72, 0) NOT NULL,
+  owner VARCHAR NOT NULL,
+  block_number BIGINT NOT NULL,
+  tx_hash VARCHAR NOT NULL,
+  spent BOOLEAN DEFAULT FALSE,
+  withdrawn BOOLEAN DEFAULT FALSE
+);

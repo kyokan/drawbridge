@@ -4,6 +4,12 @@ compile-contracts:
 migrate-contracts:
 	@$(MAKE) -C ./solidity migrate
 
+migrate-database:
+	migrate -database "$(DATABASE_URL)" -path ./migrations up
+
+create-db-migration:
+	cd  ./migrations && migrate create -ext sql $(MIGRATION_NAME)
+
 develop:
 	@$(MAKE) -C ./solidity testnet
 
