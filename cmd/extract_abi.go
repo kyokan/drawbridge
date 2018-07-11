@@ -2,13 +2,13 @@ package main
 
 import (
 	"os"
-	"github.com/pkg/errors"
 	"io/ioutil"
 	"encoding/json"
 	"path"
 	"github.com/spf13/cobra"
 	"fmt"
-	"log"
+	rawlog "log"
+	"errors"
 )
 
 func main() {
@@ -46,11 +46,11 @@ func action(c *cobra.Command) error {
 	}
 
 	if len(contracts) == 0 {
-		return errors.New("A set of input contracts is required.")
+		return errors.New("a set of input contracts is required")
 	}
 
 	if outputDir == "" {
-		return errors.New("An output directory is required.")
+		return errors.New("an output directory is required")
 	}
 
 	abis := make(map[string][]byte)
@@ -85,7 +85,7 @@ func action(c *cobra.Command) error {
 			return err
 		}
 
-		log.Printf("Outputted ABI file %s", k)
+		rawlog.Printf("Outputted ABI file %s", k)
 	}
 
 	return nil

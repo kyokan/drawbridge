@@ -1,0 +1,11 @@
+CREATE TABLE eth_outputs (
+  id VARCHAR NOT NULL PRIMARY KEY,
+  contract_address VARCHAR NOT NULL,
+  amount DECIMAL(72, 0) NOT NULL,
+  block_number BIGINT NOT NULL,
+  tx_hash VARCHAR NOT NULL,
+  script VARCHAR NOT NULL,
+  type INT NOT NULL,
+  spent BOOLEAN NOT NULL DEFAULT FALSE,
+  withdrawn BOOLEAN NOT NULL DEFAULT FALSE
+);

@@ -24,7 +24,6 @@
 #   go-tests = true
 #   unused-packages = true
 
-
 [prune]
   go-tests = true
   unused-packages = true
@@ -45,6 +44,42 @@
   name = "go.uber.org/zap"
   version = "1.8.0"
 
+[[override]]
+  name = "golang.org/x/crypto"
+  revision = "49796115aa4b964c318aad4f3084fdb41e9aa067"
+
+[[constraint]]
+  name = "golang.org/x/net"
+  revision = "ae89d30ce0c63142b652837da33d782e2b0a9b25"
+
 [[constraint]]
   name = "github.com/lightningnetwork/lnd"
-  revision = "23b1678266fc026540f3c31f3f94c4c9b36e1e39"
+  revision = "92b0b10dc75de87be3a9f895c8dfc5a84a2aec7a"
+
+[[constraint]]
+  name = "github.com/stretchr/testify"
+  version = "1.1.4"
+
+[[constraint]]
+  name = "google.golang.org/grpc"
+  revision = "b3ddf786825de56a4178401b7e174ee332173b66"
+
+[[constraint]]
+  name = "gopkg.in/macaroon.v2"
+  revision = "bed2a428da6e56d950bed5b41fcbae3141e5b0d0"
+
+[[override]]
+  name = "github.com/btcsuite/btcutil"
+  revision = "d4cc87b860166d00d6b5b9e0d3b3d71d6088d4d4"
+
+[[override]]
+  name = "github.com/btcsuite/btcd"
+  revision = "86fed781132ac890ee03e906e4ecd5d6fa180c64"
+
+[[override]]
+  name = "github.com/btcsuite/btcwallet"
+  revision = "64b5b448f5e6853a2d870f388504a7807bc951f1"
+
+[[override]]
+  name = "github.com/lightninglabs/neutrino"
+  revision = "03f4c660ea0d1586331f32561185d45eab1ba4c9"

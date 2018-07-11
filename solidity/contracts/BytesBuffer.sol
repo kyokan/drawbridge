@@ -51,6 +51,19 @@ library BytesBuffer {
 
         self.ptr += 32;
     }
+    
+    function trimmed(Buffer self) internal returns (bytes) {
+        if (self.data.length == self.ptr) {
+            return self.data;
+        }
+        
+        bytes memory out = new bytes(self.ptr);
+        for (uint i = 0; i < self.ptr; i++) {
+            out[i] = self.data[i];
+        }
+        
+        return out;
+    }
 
     function putBytes(Buffer self, bytes b) internal {
         require(self.data.length >= self.ptr + b.length);

@@ -8,6 +8,11 @@ import (
 	"time"
 	"sync"
 	"errors"
+	"github.com/btcsuite/btcd/btcec"
+	"github.com/lightningnetwork/lnd/brontide"
+	"github.com/lightningnetwork/lnd/lnwire"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/kyokan/drawbridge/pkg/crypto"
 )
 
 var nLog *zap.SugaredLogger
@@ -17,104 +22,170 @@ func init() {
 }
 
 type Node struct {
-	reactor  *Reactor
-	connMgr  *connmgr.ConnManager
-	peerBook *PeerBook
+	reactor        *Reactor
+	connMgr        *connmgr.ConnManager
+	peerBook       *PeerBook
+	bootstrapPeers []string
+	addr           string
+	port           string
+	lndIdentity    *crypto.PublicKey
+	lndHost        string
 }
 
-func StartNode(reactor *Reactor, addr string, port string, bootstrapPeers []string) (*Node) {
-	nLog.Infow("starting p2p node", "p2pIp", addr, "p2pPort", port)
+type NodeConfig struct {
+	Reactor        *Reactor
+	PeerBook       *PeerBook
+	P2PAddr        string
+	P2PPort        string
+	BootstrapPeers []string
+	LNDIdentity    *crypto.PublicKey
+	LNDHost        string
+}
 
-	listenAddr, err := net.ResolveTCPAddr("tcp", net.JoinHostPort(addr, port))
+func NewNode(config *NodeConfig) (*Node, error) {
+	return &Node{
+		reactor:        config.Reactor,
+		peerBook:       config.PeerBook,
+		bootstrapPeers: config.BootstrapPeers,
+		addr:           config.P2PAddr,
+		port:           config.P2PPort,
+		lndIdentity:    config.LNDIdentity,
+		lndHost:        config.LNDHost,
+	}, nil
+}
+
+func (n *Node) Start(identityKey *btcec.PrivateKey) error {
+	nLog.Infow("starting p2p node",
+		"p2pIp", n.addr,
+		"p2pPort", n.port,
+		"identityKey", hexutil.Encode(identityKey.PubKey().SerializeCompressed()),
+	)
+
+	listenAddr, err := net.ResolveTCPAddr("tcp", net.JoinHostPort(n.addr, n.port))
 
 	if err != nil {
 		nLog.Panicw("failed to parse TCP address", "err", err)
 	}
 
-	listener, err := net.ListenTCP("tcp", listenAddr)
+	listener, err := brontide.NewListener(identityKey, listenAddr.String())
 
 	if err != nil {
 		nLog.Panicw("failed to listen to TCP address", "err", err, "addr", listenAddr.String())
-	}
-
-	node := &Node{
-		reactor: reactor,
 	}
 
 	cmgr, err := connmgr.New(&connmgr.Config{
 		Listeners: []net.Listener{
 			listener,
 		},
-		OnAccept:       node.OnAccept,
+		OnAccept:       n.onAccept,
 		RetryDuration:  time.Second * 5,
 		TargetOutbound: 100,
 		Dial: func(a net.Addr) (net.Conn, error) {
-			if a == nil {
+			if a == nil || a == (*lnwire.NetAddress)(nil) {
 				return nil, errors.New("addr is nil")
 			}
 
-			return net.Dial("tcp", a.String())
+			return brontide.Dial(identityKey, a.(*lnwire.NetAddress), func(network string, address string) (net.Conn, error) {
+				return net.Dial(network, address)
+			})
 		},
-		OnConnection:    node.OnConnection,
-		OnDisconnection: node.OnDisconnection,
-		GetNewAddress:   node.GetNextAddress,
+		OnConnection:    n.onConnection,
+		OnDisconnection: n.onDisconnection,
 	})
 
 	if err != nil {
 		nLog.Panicw("failed to start p2p node", "err", err)
 	}
 
-	node.connMgr = cmgr
-
-	if len(bootstrapPeers) > 0 {
-		addrs, err := ResolveTCPAddrs(bootstrapPeers)
-
-		if err != nil {
-			nLog.Errorw("failed to resolve bootstrap peers", "err", err, "bootstrapPeers", bootstrapPeers)
-		}
-
-		node.peerBook = NewPeerBook(addrs)
-	} else {
-		node.peerBook = NewPeerBook(nil)
-	}
+	n.connMgr = cmgr
 
 	cmgr.Start()
-	go node.bootstrap()
 
-	return node
+	if len(n.bootstrapPeers) > 0 {
+		addrs, err := ResolveAddrs(n.bootstrapPeers)
+
+		if err != nil {
+			nLog.Errorw("failed to resolve bootstrap peers", "err", err, "bootstrapPeers", n.bootstrapPeers)
+		}
+
+		go n.bootstrap(addrs)
+	}
+
+	return nil
 }
 
-func (n *Node) GetNextAddress() (net.Addr, error) {
-	return n.peerBook.PopDisconnectedPeer(), nil
+func (n *Node) FindPeer(pub *crypto.PublicKey) *Peer {
+	return n.peerBook.FindPeer(pub)
 }
 
-func (n *Node) OnConnection(req *connmgr.ConnReq, conn net.Conn) {
-	nLog.Infow("established outbound peer connection", "conn", conn.RemoteAddr().String())
-	n.peerBook.PushConnectedPeer(conn.RemoteAddr())
+func (n *Node) SendPeer(pub *crypto.PublicKey, msg lnwire.Message) error {
+	peer := n.peerBook.FindPeer(pub)
 
-	peer := NewPeer(n.reactor, conn, true)
-	peer.Start()
+	if peer == nil {
+		return errors.New("no peer with id " + pub.CompressedHex() + " found")
+	}
+
+	return peer.Send(msg)
 }
 
-func (n *Node) OnAccept(conn net.Conn) {
-	nLog.Infow("established inbound peer connection", "conn", conn.RemoteAddr().String())
-	n.peerBook.PushConnectedPeer(conn.RemoteAddr())
+func (n *Node) onConnection(req *connmgr.ConnReq, conn net.Conn) {
+	noiseConn := conn.(*brontide.Conn)
+	peer, err := NewPeer(n.reactor, noiseConn, true)
 
-	peer := NewPeer(n.reactor, conn, false)
-	peer.Start()
+	if err != nil {
+		nLog.Errorw("failed to create peer", "err", err.Error())
+		return
+	}
+
+	nLog.Infow("established outbound peer connection", "conn", peer.Identity.CompressedHex())
+
+	if n.peerBook.AddPeer(peer) {
+		peer.Start(n.lndIdentity, n.lndHost)
+	}
 }
 
-func (n *Node) OnDisconnection(req *connmgr.ConnReq) {
-	nLog.Infow("peer disconnected", "conn", req.Addr.String())
+func (n *Node) onAccept(conn net.Conn) {
+	noiseConn := conn.(*brontide.Conn)
+	peer, err := NewPeer(n.reactor, noiseConn, false)
+
+	if err != nil {
+		nLog.Errorw("failed to create peer", "err", err.Error())
+		return
+	}
+
+	nLog.Infow("established inbound peer connection", "conn", peer.Identity.CompressedHex())
+
+	if n.peerBook.AddPeer(peer) {
+		peer.Start(n.lndIdentity, n.lndHost)
+	}
 }
 
-func (n *Node) bootstrap() {
+func (n *Node) onDisconnection(req *connmgr.ConnReq) {
+	addr := req.Addr.(*lnwire.NetAddress)
+
+	pub, err := crypto.PublicFromBTCEC(addr.IdentityKey)
+
+	if err != nil {
+		nLog.Errorw("failed to wrap public key", "err", err.Error())
+		return
+	}
+
+	nLog.Infow("peer disconnected", "conn", pub.CompressedHex())
+	n.peerBook.RemovePeer(pub)
+}
+
+func (n *Node) bootstrap(addrs []*lnwire.NetAddress) {
 	var wg sync.WaitGroup
 
-	for i := 0; i < n.peerBook.DisconnectedCount(); i++ {
+	for _, addr := range addrs {
 		wg.Add(1)
 		go (func() {
-			n.connMgr.NewConnReq()
+			req := &connmgr.ConnReq{
+				Addr:      addr,
+				Permanent: true,
+			}
+
+			n.connMgr.Connect(req)
 			wg.Done()
 		})()
 	}

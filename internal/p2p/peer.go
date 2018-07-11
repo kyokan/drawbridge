@@ -1,7 +1,6 @@
 package p2p
 
 import (
-	"net"
 	"github.com/lightningnetwork/lnd/lnwire"
 	"go.uber.org/zap"
 	"github.com/kyokan/drawbridge/internal/logger"
@@ -10,12 +9,15 @@ import (
 	"io"
 	"sync/atomic"
 	"sync"
+	"github.com/lightningnetwork/lnd/brontide"
+	"github.com/kyokan/drawbridge/pkg/crypto"
+	"github.com/kyokan/drawbridge/pkg/wire"
 )
 
 var pLog *zap.SugaredLogger
 
 const idleTimeout = time.Minute * 5
-const pingInterval = time.Second * 5
+const pingInterval = time.Minute * 1
 
 func init() {
 	pLog = logger.Logger.Named("peer")
@@ -23,16 +25,26 @@ func init() {
 
 type Peer struct {
 	reactor        *Reactor
-	conn           net.Conn
+	conn           *brontide.Conn
 	selfOriginated bool
 	writeBuf       *[65535]byte
 	incomingQueue  chan *Envelope
 	outgoingQueue  chan *Envelope
-	disconnected uint32
-	wg *sync.WaitGroup
+	errChan        chan error
+	disconnected   uint32
+	wg             *sync.WaitGroup
+
+	Identity *crypto.PublicKey
+	LNDIdentity *crypto.PublicKey
 }
 
-func NewPeer(reactor *Reactor, conn net.Conn, selfOriginated bool) *Peer {
+func NewPeer(reactor *Reactor, conn *brontide.Conn, selfOriginated bool) (*Peer, error) {
+	identity, err := crypto.PublicFromBTCEC(conn.RemotePub())
+
+	if err != nil {
+		return nil, err
+	}
+
 	return &Peer{
 		reactor:        reactor,
 		conn:           conn,
@@ -40,21 +52,21 @@ func NewPeer(reactor *Reactor, conn net.Conn, selfOriginated bool) *Peer {
 		writeBuf:       new([65535]byte),
 		incomingQueue:  make(chan *Envelope),
 		outgoingQueue:  make(chan *Envelope),
-		disconnected: 0,
-		wg: new(sync.WaitGroup),
-	}
+		errChan:        make(chan error),
+		disconnected:   0,
+		wg:             new(sync.WaitGroup),
+		Identity:       identity,
+	}, nil
 }
 
-func (p *Peer) Start() {
+func (p *Peer) Start(lndIdent *crypto.PublicKey, lndHost string) {
 	p.reactor.AddEnvelopeChan(p.incomingQueue, p.outgoingQueue)
 
 	go p.readHandler()
 	go p.writeHandler()
 	go p.pingHandler()
 
-	globalFeats := lnwire.NewRawFeatureVector()
-	localFeats := lnwire.NewRawFeatureVector()
-	msg := lnwire.NewInitMessage(globalFeats, localFeats)
+	msg := wire.NewInit(lndIdent, lndHost)
 	p.outgoingQueue <- NewEnvelope(p, msg)
 }
 
@@ -64,6 +76,11 @@ func (p *Peer) Stop() (error) {
 	close(p.incomingQueue)
 	close(p.outgoingQueue)
 	return p.conn.Close()
+}
+
+func (p *Peer) Send(msg lnwire.Message) error {
+	p.outgoingQueue <- NewEnvelope(p, msg)
+	return nil
 }
 
 func (p *Peer) readHandler() {
@@ -79,27 +96,24 @@ func (p *Peer) readHandler() {
 			return
 		}
 
-		select {
-		default:
-			idleTimer.Stop()
-			nextMessage, err := p.readMessage()
+		idleTimer.Stop()
+		nextMessage, err := p.readMessage()
 
-			if err != nil {
-				if err == io.EOF {
-					pLog.Infow("remote end hung up", "peer", p, "err", err)
-					p.Stop()
-				} else {
-					pLog.Infow("failed to read message", "peer", p, "err", err)
-				}
-
-				continue
+		if err != nil {
+			if err == io.EOF {
+				pLog.Infow("remote end hung up", "peer", p, "err", err)
+				p.Stop()
+			} else {
+				pLog.Infow("failed to read message", "peer", p, "err", err)
 			}
 
-			pLog.Infow("received message", "peer", p, "wireMsg", nextMessage.MsgType().String())
-
-			p.incomingQueue <- NewEnvelope(p, nextMessage)
-			idleTimer.Reset(idleTimeout)
+			continue
 		}
+
+		pLog.Infow("received message", "peer", p, "wireMsg", wire.MessageName(nextMessage.MsgType()))
+
+		p.incomingQueue <- NewEnvelope(p, nextMessage)
+		idleTimer.Reset(idleTimeout)
 	}
 }
 
@@ -114,7 +128,7 @@ func (p *Peer) writeHandler() {
 
 		select {
 		case envelope := <-p.outgoingQueue:
-			pLog.Infow("writing lnwire message", "peer", p, "wireMsg", envelope.Msg.MsgType().String())
+			pLog.Infow("writing lnwire message", "peer", p, "wireMsg", wire.MessageName(envelope.Msg.MsgType()))
 			err := p.writeMessage(envelope.Msg)
 
 			if err != nil {
@@ -144,7 +158,13 @@ func (p *Peer) pingHandler() {
 }
 
 func (p *Peer) readMessage() (lnwire.Message, error) {
-	msg, err := lnwire.ReadMessage(p.conn, 0)
+	rawMsg, err := p.conn.ReadNextMessage()
+
+	if err != nil {
+		return nil, err
+	}
+
+	msg, err := wire.ReadMessage(bytes.NewReader(rawMsg), 0)
 
 	if err != nil {
 		return nil, err
@@ -155,7 +175,7 @@ func (p *Peer) readMessage() (lnwire.Message, error) {
 
 func (p *Peer) writeMessage(msg lnwire.Message) error {
 	b := bytes.NewBuffer(p.writeBuf[0:0:len(p.writeBuf)])
-	_, err := lnwire.WriteMessage(b, msg, 0)
+	_, err := wire.WriteMessage(b, msg)
 
 	if err != nil {
 		return err
@@ -167,5 +187,5 @@ func (p *Peer) writeMessage(msg lnwire.Message) error {
 }
 
 func (p *Peer) String() string {
-	return p.conn.LocalAddr().String()
+	return p.Identity.CompressedHex()
 }

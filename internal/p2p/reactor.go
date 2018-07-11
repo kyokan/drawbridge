@@ -5,6 +5,8 @@ import (
 	"github.com/lightningnetwork/lnd/lnwire"
 	"go.uber.org/zap"
 	"github.com/kyokan/drawbridge/internal/logger"
+	"time"
+	"github.com/kyokan/drawbridge/pkg/wire"
 )
 
 type Reactor struct {
@@ -13,7 +15,7 @@ type Reactor struct {
 	toRemove []uint64
 	id       uint64
 	mut      *sync.Mutex
-	handlers *Handlers
+	msgHandlers []MsgHandler
 }
 
 type reactorChannel struct {
@@ -27,14 +29,14 @@ func init() {
 	rLog = logger.Logger.Named("reactor")
 }
 
-func NewReactor(handlers *Handlers) *Reactor {
+func NewReactor(msgHandlers []MsgHandler) *Reactor {
 	return &Reactor{
-		chans:    make(map[uint64]*reactorChannel),
-		toAdd:    make(map[uint64]*reactorChannel),
-		toRemove: make([]uint64, 10),
-		id:       0,
-		mut:      new(sync.Mutex),
-		handlers: handlers,
+		chans:       make(map[uint64]*reactorChannel),
+		toAdd:       make(map[uint64]*reactorChannel),
+		toRemove:    make([]uint64, 10),
+		id:          0,
+		mut:         new(sync.Mutex),
+		msgHandlers: msgHandlers,
 	}
 }
 
@@ -66,6 +68,8 @@ func (r *Reactor) Run() {
 				}
 			}
 		}
+
+		time.Sleep(1 * time.Second)
 	}
 }
 
@@ -88,19 +92,18 @@ func (r *Reactor) manageMembership() {
 
 func (r *Reactor) handle(envelope *Envelope) lnwire.Message {
 	msg := envelope.Msg
-
 	var res lnwire.Message
 	var err error
 
-	switch msg.MsgType() {
-	case lnwire.MsgPing:
-		res, err = r.handlers.Ping.HandlePing(msg.(*lnwire.Ping))
-	case lnwire.MsgOpenChannel:
-		res, err = r.handlers.ChannelEstablishment.HandleOpenChannel(envelope.Peer, msg.(*lnwire.OpenChannel))
+	for _, handler := range r.msgHandlers {
+		if handler.CanAccept(msg) {
+			res, err = handler.Accept(envelope)
+			break
+		}
 	}
 
 	if err != nil {
-		rLog.Warnw("caught error processing message", "msgType", msg.MsgType().String(),
+		rLog.Warnw("caught error processing message", "msgType", wire.MessageName(msg.MsgType()),
 			"err", err.Error())
 		return nil
 	}
