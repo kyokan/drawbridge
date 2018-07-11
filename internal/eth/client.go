@@ -10,13 +10,14 @@ import (
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/kyokan/drawbridge/internal/wallet"
 )
 
 type DepositResult struct {
 }
 
 type Client struct {
-	keyManager    *KeyManager
+	keyManager    *wallet.KeyManager
 	rpc           *rpc.Client
 	client        *ethclient.Client
 	utxoContract  *contracts.UTXOToken
@@ -25,7 +26,7 @@ type Client struct {
 	erc20Address  common.Address
 }
 
-func NewClient(keyManager *KeyManager, url string, address string) (*Client, error) {
+func NewClient(keyManager *wallet.KeyManager, url string, address string) (*Client, error) {
 	utxoAddress := common.HexToAddress(address)
 
 	r, err := rpc.DialContext(context.Background(), url)

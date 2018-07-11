@@ -11,6 +11,11 @@ import (
 	"github.com/kyokan/drawbridge/internal/p2p"
 	"github.com/kyokan/drawbridge/pkg"
 	"github.com/kyokan/drawbridge/internal/db"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/roasbeef/btcd/btcec"
+	"crypto/ecdsa"
+	"github.com/kyokan/drawbridge/internal/wallet"
+	"github.com/kyokan/drawbridge/internal/channel"
 )
 
 var log *zap.SugaredLogger
@@ -21,15 +26,23 @@ func init() {
 
 func Start() {
 	keyHex := stringFlag("private-key")
+	identityKeyHex := stringFlag("identity-private-key")
 	databaseUrl := stringFlag("database-url")
 	chainIdFlag := stringFlag("chain-id")
+
+	identityKey, err := crypto.HexToECDSA(identityKeyHex)
+
+	if err != nil {
+		log.Panicw("invalid identity key", "err", err.Error())
+	}
+
 	chainId, err := strconv.Atoi(chainIdFlag)
 
 	if err != nil {
 		log.Panicw("mal-formed chain id argument", "err", err.Error())
 	}
 
-	km, err := eth.NewKeyManager(keyHex, big.NewInt(int64(chainId)))
+	km, err := wallet.NewKeyManager(keyHex, big.NewInt(int64(chainId)))
 
 	if err != nil {
 		log.Panicw("failed to instantiate key manager", "err", err.Error())
@@ -61,10 +74,9 @@ func Start() {
 
 	config := &pkg.Config{
 		ChainHashes: chainHashes,
-	}
-
-	container := &api.ServiceContainer{
-		FundingService: api.NewFundingService(client),
+		P2PAddr: stringFlag("p2p-ip"),
+		P2PPort: stringFlag("p2p-port"),
+		BootstrapPeers: viper.GetStringSlice("bootstrap-peers"),
 	}
 
 	handlers := &p2p.Handlers{
@@ -76,6 +88,18 @@ func Start() {
 	}
 
 	reactor := p2p.NewReactor(handlers)
+
+	node, err := p2p.NewNode(reactor, config)
+
+	cMgr := channel.NewManager(node)
+
+	container := &api.ServiceContainer{
+		FundingService: api.NewFundingService(client, cMgr),
+	}
+
+	if err != nil {
+		log.Panicw("failed to create node", "err", err.Error())
+	}
 
 	go reactor.Run()
 
@@ -90,7 +114,9 @@ func Start() {
 	})()
 
 	go (func() {
-		p2p.StartNode(reactor, stringFlag("p2p-ip"), stringFlag("p2p-port"), viper.GetStringSlice("bootstrap-peers"))
+		if err := node.Start(convKey(identityKey)); err != nil {
+			log.Panicw("failed to start node", "err", err.Error())
+		}
 	})()
 
 	log.Info("started")
@@ -100,4 +126,8 @@ func Start() {
 
 func stringFlag(name string) (string) {
 	return viper.GetString(name)
+}
+
+func convKey(key *ecdsa.PrivateKey) *btcec.PrivateKey {
+	return (*btcec.PrivateKey)(key)
 }

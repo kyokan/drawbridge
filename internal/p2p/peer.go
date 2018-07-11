@@ -1,7 +1,6 @@
 package p2p
 
 import (
-	"net"
 	"github.com/lightningnetwork/lnd/lnwire"
 	"go.uber.org/zap"
 	"github.com/kyokan/drawbridge/internal/logger"
@@ -10,6 +9,10 @@ import (
 	"io"
 	"sync/atomic"
 	"sync"
+	"github.com/lightningnetwork/lnd/brontide"
+	"github.com/roasbeef/btcd/btcec"
+	"github.com/kyokan/drawbridge/internal/conv"
+	"fmt"
 )
 
 var pLog *zap.SugaredLogger
@@ -23,29 +26,33 @@ func init() {
 
 type Peer struct {
 	reactor        *Reactor
-	conn           net.Conn
+	conn           *brontide.Conn
 	selfOriginated bool
 	writeBuf       *[65535]byte
 	incomingQueue  chan *Envelope
 	outgoingQueue  chan *Envelope
-	disconnected uint32
-	wg *sync.WaitGroup
+	disconnected   uint32
+	wg             *sync.WaitGroup
+
+	Identity *btcec.PublicKey
 }
 
-func NewPeer(reactor *Reactor, conn net.Conn, selfOriginated bool) *Peer {
+func NewPeer(reactor *Reactor, conn *brontide.Conn, selfOriginated bool) *Peer {
 	return &Peer{
 		reactor:        reactor,
 		conn:           conn,
 		selfOriginated: selfOriginated,
 		writeBuf:       new([65535]byte),
-		incomingQueue:  make(chan *Envelope),
-		outgoingQueue:  make(chan *Envelope),
-		disconnected: 0,
-		wg: new(sync.WaitGroup),
+		incomingQueue:  make(chan *Envelope, 10),
+		outgoingQueue:  make(chan *Envelope, 10),
+		disconnected:   0,
+		wg:             new(sync.WaitGroup),
+		Identity:       conn.RemotePub(),
 	}
 }
 
 func (p *Peer) Start() {
+	fmt.Println("start peer")
 	p.reactor.AddEnvelopeChan(p.incomingQueue, p.outgoingQueue)
 
 	go p.readHandler()
@@ -66,6 +73,11 @@ func (p *Peer) Stop() (error) {
 	return p.conn.Close()
 }
 
+func (p * Peer) Send(msg lnwire.Message) error {
+	p.outgoingQueue <- NewEnvelope(p, msg)
+	return nil
+}
+
 func (p *Peer) readHandler() {
 	p.wg.Add(1)
 
@@ -79,27 +91,24 @@ func (p *Peer) readHandler() {
 			return
 		}
 
-		select {
-		default:
-			idleTimer.Stop()
-			nextMessage, err := p.readMessage()
+		idleTimer.Stop()
+		nextMessage, err := p.readMessage()
 
-			if err != nil {
-				if err == io.EOF {
-					pLog.Infow("remote end hung up", "peer", p, "err", err)
-					p.Stop()
-				} else {
-					pLog.Infow("failed to read message", "peer", p, "err", err)
-				}
-
-				continue
+		if err != nil {
+			if err == io.EOF {
+				pLog.Infow("remote end hung up", "peer", p, "err", err)
+				p.Stop()
+			} else {
+				pLog.Infow("failed to read message", "peer", p, "err", err)
 			}
 
-			pLog.Infow("received message", "peer", p, "wireMsg", nextMessage.MsgType().String())
-
-			p.incomingQueue <- NewEnvelope(p, nextMessage)
-			idleTimer.Reset(idleTimeout)
+			continue
 		}
+
+		pLog.Infow("received message", "peer", p, "wireMsg", nextMessage.MsgType().String())
+
+		p.incomingQueue <- NewEnvelope(p, nextMessage)
+		idleTimer.Reset(idleTimeout)
 	}
 }
 
@@ -144,7 +153,13 @@ func (p *Peer) pingHandler() {
 }
 
 func (p *Peer) readMessage() (lnwire.Message, error) {
-	msg, err := lnwire.ReadMessage(p.conn, 0)
+	rawMsg, err := p.conn.ReadNextMessage()
+
+	if err != nil {
+		return nil, err
+	}
+
+	msg, err := lnwire.ReadMessage(bytes.NewReader(rawMsg), 0)
 
 	if err != nil {
 		return nil, err
@@ -167,5 +182,5 @@ func (p *Peer) writeMessage(msg lnwire.Message) error {
 }
 
 func (p *Peer) String() string {
-	return p.conn.LocalAddr().String()
+	return conv.PubKeyToHex(p.Identity)
 }

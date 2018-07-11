@@ -31,6 +31,9 @@ func (h *ChainHashes) ValidChainHash(hash chainhash.Hash) bool {
 }
 
 type Config struct {
-	ChainHashes   *ChainHashes
-	SigningPubkey *btcec.PublicKey
+	ChainHashes    *ChainHashes
+	SigningPubkey  *btcec.PublicKey
+	P2PAddr        string
+	P2PPort        string
+	BootstrapPeers []string
 }

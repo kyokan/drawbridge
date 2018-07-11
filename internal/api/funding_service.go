@@ -6,6 +6,8 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"go.uber.org/zap"
 	"github.com/kyokan/drawbridge/internal/logger"
+	"github.com/roasbeef/btcd/btcec"
+	"github.com/kyokan/drawbridge/internal/channel"
 )
 
 var fsLog *zap.SugaredLogger
@@ -16,11 +18,13 @@ func init() {
 
 type FundingService struct {
 	client *eth.Client
+	cMgr   *channel.Manager
 }
 
-func NewFundingService(client *eth.Client) (*FundingService) {
+func NewFundingService(client *eth.Client, cMgr *channel.Manager) (*FundingService) {
 	return &FundingService{
 		client: client,
+		cMgr:   cMgr,
 	}
 }
 
@@ -78,7 +82,7 @@ func (f *FundingService) Deposit(r *http.Request, args *DepositArgs, reply *Depo
 
 	if err != nil {
 		fsLog.Errorw("decoding failure",
-			"error", err,
+			"error", err.Error(),
 		)
 		return err
 	}
@@ -96,5 +100,51 @@ func (f *FundingService) Deposit(r *http.Request, args *DepositArgs, reply *Depo
 		"amount", args.Amount,
 		"txHash", reply.TxHash,
 	)
+	return nil
+}
+
+type OpenChannelArgs struct {
+	PeerPubkey string
+	Amount     string
+}
+
+type OpenChannelReply struct {
+	Status string
+}
+
+func (f *FundingService) OpenChannel(r *http.Request, args *OpenChannelArgs, reply *OpenChannelReply) error {
+	fsLog.Infow("received open channel request",
+		"peerId", args.PeerPubkey,
+		"amount", args.Amount,
+	)
+
+	amountBig, err := hexutil.DecodeBig(args.Amount)
+
+	if err != nil {
+		fsLog.Errorw("decoding failure",
+			"error", err.Error(),
+		)
+	}
+
+	pubBytes, err := hexutil.Decode(args.PeerPubkey)
+
+	if err != nil {
+		return err
+	}
+
+	pub, err := btcec.ParsePubKey(pubBytes, btcec.S256())
+
+	if err != nil {
+		return err
+	}
+
+	err = f.cMgr.OpenChannel(pub, amountBig)
+
+	if err != nil {
+		return err
+	}
+
+	reply.Status = StatusOk
+
 	return nil
 }

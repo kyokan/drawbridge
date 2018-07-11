@@ -5,6 +5,7 @@ import (
 	"github.com/lightningnetwork/lnd/lnwire"
 	"go.uber.org/zap"
 	"github.com/kyokan/drawbridge/internal/logger"
+	"time"
 )
 
 type Reactor struct {
@@ -66,6 +67,8 @@ func (r *Reactor) Run() {
 				}
 			}
 		}
+
+		time.Sleep(1 * time.Second)
 	}
 }
 

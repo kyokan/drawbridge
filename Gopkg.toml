@@ -24,7 +24,6 @@
 #   go-tests = true
 #   unused-packages = true
 
-
 [prune]
   go-tests = true
   unused-packages = true
@@ -46,5 +45,13 @@
   version = "1.8.0"
 
 [[constraint]]
+  name = "golang.org/x/crypto"
+  revision = "49796115aa4b964c318aad4f3084fdb41e9aa067"
+
+[[constraint]]
   name = "github.com/lightningnetwork/lnd"
-  revision = "23b1678266fc026540f3c31f3f94c4c9b36e1e39"
+  revision = "7cf5ebe2650b6798182e10be198c7ffc1f1d6e19"
+
+[[override]]
+  name = "github.com/lightninglabs/neutrino"
+  revision = "36d9a509ff4ea1e916a73c6f1c2b784c1faf11ed"

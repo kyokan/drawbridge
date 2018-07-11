@@ -1,63 +1,68 @@
 package p2p
 
 import (
-	"net"
+	"github.com/roasbeef/btcd/btcec"
+	"github.com/kyokan/drawbridge/internal/conv"
 	"sync"
 )
 
-type AddrSet = map[net.Addr]bool
-
 type PeerBook struct {
-	all          AddrSet
-	connected    AddrSet
-	disconnected AddrSet
-	mut          *sync.Mutex
+	peerIndices map[string]uint16
+	peers       map[uint16]*Peer
+	mut         *sync.Mutex
+	lastIdx     uint16
 }
 
-func NewPeerBook(initialPeers []net.Addr) (*PeerBook) {
-	all := make(map[net.Addr]bool)
-	disconnected := make(map[net.Addr]bool)
-
-	for _, p := range initialPeers {
-		all[p] = true
-		disconnected[p] = true
-	}
-
+func NewPeerBook() *PeerBook {
 	return &PeerBook{
-		all:          all,
-		connected:    make(map[net.Addr]bool),
-		disconnected: disconnected,
-		mut:          &sync.Mutex{},
+		peerIndices: make(map[string]uint16),
+		peers:       make(map[uint16]*Peer),
+		mut:         &sync.Mutex{},
+		lastIdx:     0,
 	}
 }
 
-func (p *PeerBook) PushConnectedPeer(addr net.Addr) {
-	p.mut.Lock()
-	defer p.mut.Unlock()
-	p.connected[addr] = true
-}
-
-func (p *PeerBook) DisconnectPeer(addr net.Addr) {
-	p.mut.Lock()
-	defer p.mut.Unlock()
-	delete(p.connected, addr)
-}
-
-func (p *PeerBook) DisconnectedCount() (int) {
-	p.mut.Lock()
-	defer p.mut.Unlock()
-	return len(p.disconnected)
-}
-
-func (p *PeerBook) PopDisconnectedPeer() (net.Addr) {
+func (p *PeerBook) FindPeer(pub *btcec.PublicKey) (*Peer) {
 	p.mut.Lock()
 	defer p.mut.Unlock()
 
-	for k := range p.disconnected {
-		delete(p.disconnected, k)
-		delete(p.all, k)
-		return k
+	peerIdx := p.peerIndices[conv.PubKeyToHex(pub)]
+
+	if peerIdx == 0 {
+		return nil
 	}
 
-	return nil
+	return p.peers[peerIdx]
+}
+
+func (p *PeerBook) AddPeer(peer *Peer) bool {
+	p.mut.Lock()
+	defer p.mut.Unlock()
+
+	keyStr := conv.PubKeyToHex(peer.Identity)
+
+	if p.peerIndices[keyStr] != 0 {
+		return false
+	}
+
+	p.lastIdx++
+	p.peerIndices[keyStr] = p.lastIdx
+	p.peers[p.lastIdx] = peer
+	return true
+}
+
+func (p *PeerBook) RemovePeer(pub *btcec.PublicKey) bool {
+	p.mut.Lock()
+	defer p.mut.Unlock()
+
+	keyStr := conv.PubKeyToHex(pub)
+
+	if p.peerIndices[keyStr] == 0 {
+		return false
+	}
+
+	peerIdx := p.peerIndices[keyStr]
+	delete(p.peerIndices, keyStr)
+	delete(p.peers, peerIdx)
+	return true
 }

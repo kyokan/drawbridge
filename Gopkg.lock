@@ -3,21 +3,21 @@
 
 [[projects]]
   branch = "master"
+  name = "github.com/aead/siphash"
+  packages = ["."]
+  revision = "e404fcfc888570cadd1610538e2dbc89f66af814"
+
+[[projects]]
+  branch = "master"
   name = "github.com/aristanetworks/goarista"
   packages = ["monotime"]
-  revision = "2c5933638c5ef1bc320b01486100788c81d57b99"
+  revision = "32f94db2e6faa2c7250286dfb4c7ad3dc0f3ead2"
 
 [[projects]]
   branch = "master"
   name = "github.com/btcsuite/btcd"
-  packages = [
-    "btcec",
-    "chaincfg",
-    "chaincfg/chainhash",
-    "connmgr",
-    "wire"
-  ]
-  revision = "86fed781132ac890ee03e906e4ecd5d6fa180c64"
+  packages = ["btcec"]
+  revision = "fdfc19097e7ac6b57035062056f5b7b4638b8898"
 
 [[projects]]
   branch = "master"
@@ -27,9 +27,34 @@
 
 [[projects]]
   branch = "master"
+  name = "github.com/btcsuite/go-socks"
+  packages = ["socks"]
+  revision = "4720035b7bfd2a9bb130b1c184f8bbe41b6f0d0f"
+
+[[projects]]
+  branch = "master"
   name = "github.com/btcsuite/golangcrypto"
-  packages = ["ripemd160"]
+  packages = [
+    "nacl/secretbox",
+    "pbkdf2",
+    "poly1305",
+    "ripemd160",
+    "salsa20/salsa",
+    "scrypt",
+    "ssh/terminal"
+  ]
   revision = "53f62d9b43e87a6c56975cf862af7edf33a8d0df"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/btcsuite/websocket"
+  packages = ["."]
+  revision = "31079b6807923eb23992c421b114992b95131b55"
+
+[[projects]]
+  name = "github.com/coreos/bbolt"
+  packages = ["."]
+  revision = "4f5275f4ebbf6fe7cb772de987fa96ee674460a7"
 
 [[projects]]
   name = "github.com/davecgh/go-spew"
@@ -64,8 +89,8 @@
     "rpc",
     "trie"
   ]
-  revision = "dea1ce052a10cd7d401a5c04f83f371a06fe293c"
-  version = "v1.8.11"
+  revision = "37685930d953bcbe023f9bc65b135a8d8b8f1488"
+  version = "v1.8.12"
 
 [[projects]]
   name = "github.com/fsnotify/fsnotify"
@@ -77,6 +102,7 @@
   name = "github.com/go-errors/errors"
   packages = ["."]
   revision = "a6af135bd4e28680facf08a3d206b454abc877a4"
+  version = "v1.0.1"
 
 [[projects]]
   name = "github.com/go-stack/stack"
@@ -124,6 +150,12 @@
 
 [[projects]]
   branch = "master"
+  name = "github.com/kkdai/bstream"
+  packages = ["."]
+  revision = "f71540b9dfdcfe64dbf2818e9b66423c6aafcacd"
+
+[[projects]]
+  branch = "master"
   name = "github.com/lib/pq"
   packages = [
     ".",
@@ -132,26 +164,38 @@
   revision = "90697d60dd844d5ef6ff15135d0203f65d2f53b8"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/lightninglabs/gozmq"
+  packages = ["."]
+  revision = "462a8a75388506b68f76661af8d649f0b88e5301"
+
+[[projects]]
+  name = "github.com/lightninglabs/neutrino"
+  packages = [
+    ".",
+    "filterdb",
+    "headerfs"
+  ]
+  revision = "36d9a509ff4ea1e916a73c6f1c2b784c1faf11ed"
+
+[[projects]]
   name = "github.com/lightningnetwork/lnd"
   packages = [
+    "brontide",
+    "chainntnfs",
+    "channeldb",
+    "keychain",
+    "lnwallet",
     "lnwire",
-    "tor"
+    "shachain"
   ]
-  revision = "23b1678266fc026540f3c31f3f94c4c9b36e1e39"
+  revision = "7cf5ebe2650b6798182e10be198c7ffc1f1d6e19"
 
 [[projects]]
   name = "github.com/magiconair/properties"
   packages = ["."]
   revision = "c2353362d570a7bfa228149c62842019201cfb71"
   version = "v1.8.0"
-
-[[projects]]
-  name = "github.com/miekg/dns"
-  packages = [
-    ".",
-    "internal/socket"
-  ]
-  revision = "79bfde677fa81ff8d27c4330c35bda075d360641"
 
 [[projects]]
   branch = "master"
@@ -184,12 +228,20 @@
   version = "v0.9.0"
 
 [[projects]]
+  branch = "master"
   name = "github.com/roasbeef/btcd"
   packages = [
+    "addrmgr",
+    "blockchain",
     "btcec",
+    "btcjson",
     "chaincfg",
     "chaincfg/chainhash",
     "connmgr",
+    "database",
+    "peer",
+    "rpcclient",
+    "txscript",
     "wire"
   ]
   revision = "a03db407e40d3b66ea29984263bbc8bf4d2f04c4"
@@ -199,9 +251,33 @@
   packages = [
     ".",
     "base58",
-    "bech32"
+    "bech32",
+    "gcs",
+    "gcs/builder",
+    "hdkeychain",
+    "txsort"
   ]
   revision = "dfb640c57141f1c2113b92b4b16d2a89c30dd258"
+
+[[projects]]
+  name = "github.com/roasbeef/btcwallet"
+  packages = [
+    "chain",
+    "internal/helpers",
+    "internal/legacy/keystore",
+    "internal/legacy/rename",
+    "internal/prompt",
+    "internal/zero",
+    "snacl",
+    "waddrmgr",
+    "wallet",
+    "wallet/internal/txsizes",
+    "wallet/txauthor",
+    "wallet/txrules",
+    "walletdb",
+    "wtxmgr"
+  ]
+  revision = "ccd48bb4720f2baeaa795cac81264f6ced2da4c7"
 
 [[projects]]
   name = "github.com/rs/cors"
@@ -265,7 +341,7 @@
     "leveldb/table",
     "leveldb/util"
   ]
-  revision = "0d5a0ceb10cf9ab89fdd744cc8c50a83134f6697"
+  revision = "c4c61651e9e37fa117f53c5a906d3b63090d8445"
 
 [[projects]]
   name = "go.uber.org/atomic"
@@ -293,28 +369,29 @@
   version = "v1.8.0"
 
 [[projects]]
-  branch = "master"
   name = "golang.org/x/crypto"
   packages = [
+    "chacha20poly1305",
+    "hkdf",
+    "internal/chacha20",
     "pbkdf2",
+    "poly1305",
     "ripemd160",
     "scrypt"
   ]
-  revision = "a49355c7e3f8fe157a85be2f77e6e269a0f89602"
+  revision = "49796115aa4b964c318aad4f3084fdb41e9aa067"
 
 [[projects]]
+  branch = "master"
   name = "golang.org/x/net"
-  packages = [
-    "proxy",
-    "websocket"
-  ]
-  revision = "ae89d30ce0c63142b652837da33d782e2b0a9b25"
+  packages = ["websocket"]
+  revision = "039a4258aec0ad3c79b905677cceeab13b296a77"
 
 [[projects]]
   branch = "master"
   name = "golang.org/x/sys"
   packages = ["unix"]
-  revision = "7138fd3d9dc8335c567ca206f4333fb75eb05d56"
+  revision = "1b2967e3c290b7c545b3db0deeda16e9be4f98a2"
 
 [[projects]]
   name = "golang.org/x/text"
@@ -337,7 +414,7 @@
     "imports",
     "internal/fastwalk"
   ]
-  revision = "ffe88906718454e356e61776b54256e873fc133b"
+  revision = "18f0b668f1069d7f55ac25b6f2670e30cd6499c0"
 
 [[projects]]
   name = "google.golang.org/grpc"
@@ -371,6 +448,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "98d0e0fa521e700ac37f8bf57a29c23e459ec30e0723893ffb9323988ecdb3f4"
+  inputs-digest = "f16548dd47469e37bd5490e87a42274bbc201a27feee1ca7a7feda541dd89eef"
   solver-name = "gps-cdcl"
   solver-version = 1

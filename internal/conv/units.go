@@ -1,4 +1,4 @@
-package eth
+package conv
 
 import "math/big"
 
