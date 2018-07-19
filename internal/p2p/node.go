@@ -12,7 +12,8 @@ import (
 	"github.com/roasbeef/btcd/btcec"
 	"github.com/lightningnetwork/lnd/brontide"
 	"github.com/lightningnetwork/lnd/lnwire"
-	"github.com/kyokan/drawbridge/internal/conv"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/kyokan/drawbridge/pkg/crypto"
 )
 
 var nLog *zap.SugaredLogger
@@ -22,26 +23,30 @@ func init() {
 }
 
 type Node struct {
-	reactor  *Reactor
-	connMgr  *connmgr.ConnManager
-	peerBook *PeerBook
+	reactor        *Reactor
+	connMgr        *connmgr.ConnManager
+	peerBook       *PeerBook
 	bootstrapPeers []string
-	addr string
-	port string
+	addr           string
+	port           string
 }
 
-func NewNode(reactor *Reactor, config *pkg.Config) (*Node, error) {
+func NewNode(reactor *Reactor, peerBook *PeerBook, config *pkg.Config) (*Node, error) {
 	return &Node{
-		reactor: reactor,
-		peerBook: NewPeerBook(),
-		addr: config.P2PAddr,
-		port: config.P2PPort,
+		reactor:        reactor,
+		peerBook:       peerBook,
+		addr:           config.P2PAddr,
+		port:           config.P2PPort,
 		bootstrapPeers: config.BootstrapPeers,
 	}, nil
 }
 
 func (n *Node) Start(identityKey *btcec.PrivateKey) error {
-	nLog.Infow("starting p2p node", "p2pIp", n.addr, "p2pPort", n.port, "identityKey", conv.PubKeyToHex(identityKey.PubKey()))
+	nLog.Infow("starting p2p node",
+		"p2pIp", n.addr,
+		"p2pPort", n.port,
+		"identityKey", hexutil.Encode(identityKey.PubKey().SerializeCompressed()),
+	)
 
 	listenAddr, err := net.ResolveTCPAddr("tcp", net.JoinHostPort(n.addr, n.port))
 
@@ -55,16 +60,11 @@ func (n *Node) Start(identityKey *btcec.PrivateKey) error {
 		nLog.Panicw("failed to listen to TCP address", "err", err, "addr", listenAddr.String())
 	}
 
-	node := &Node{
-		reactor: n.reactor,
-		peerBook: NewPeerBook(),
-	}
-
 	cmgr, err := connmgr.New(&connmgr.Config{
 		Listeners: []net.Listener{
 			listener,
 		},
-		OnAccept:       node.onAccept,
+		OnAccept:       n.onAccept,
 		RetryDuration:  time.Second * 5,
 		TargetOutbound: 100,
 		Dial: func(a net.Addr) (net.Conn, error) {
@@ -76,15 +76,15 @@ func (n *Node) Start(identityKey *btcec.PrivateKey) error {
 				return net.Dial(network, address)
 			})
 		},
-		OnConnection:    node.onConnection,
-		OnDisconnection: node.onDisconnection,
+		OnConnection:    n.onConnection,
+		OnDisconnection: n.onDisconnection,
 	})
 
 	if err != nil {
 		nLog.Panicw("failed to start p2p node", "err", err)
 	}
 
-	node.connMgr = cmgr
+	n.connMgr = cmgr
 
 	cmgr.Start()
 
@@ -95,17 +95,21 @@ func (n *Node) Start(identityKey *btcec.PrivateKey) error {
 			nLog.Errorw("failed to resolve bootstrap peers", "err", err, "bootstrapPeers", n.bootstrapPeers)
 		}
 
-		go node.bootstrap(addrs)
+		go n.bootstrap(addrs)
 	}
 
 	return nil
 }
 
-func (n *Node) SendPeer(pub *btcec.PublicKey, msg lnwire.Message) error {
+func (n *Node) FindPeer(pub *crypto.PublicKey) *Peer {
+	return n.peerBook.FindPeer(pub)
+}
+
+func (n *Node) SendPeer(pub *crypto.PublicKey, msg lnwire.Message) error {
 	peer := n.peerBook.FindPeer(pub)
 
 	if peer == nil {
-		return errors.New("no peer with id " + conv.PubKeyToHex(pub) + " found")
+		return errors.New("no peer with id " + pub.CompressedHex() + " found")
 	}
 
 	return peer.Send(msg)
@@ -113,8 +117,14 @@ func (n *Node) SendPeer(pub *btcec.PublicKey, msg lnwire.Message) error {
 
 func (n *Node) onConnection(req *connmgr.ConnReq, conn net.Conn) {
 	noiseConn := conn.(*brontide.Conn)
-	nLog.Infow("established outbound peer connection", "conn", conv.PubKeyToHex(noiseConn.RemotePub()))
-	peer := NewPeer(n.reactor, noiseConn, true)
+	peer, err := NewPeer(n.reactor, noiseConn, true)
+
+	if err != nil {
+		nLog.Errorw("failed to create peer", "err", err.Error())
+		return
+	}
+
+	nLog.Infow("established outbound peer connection", "conn", peer.Identity.CompressedHex())
 
 	if n.peerBook.AddPeer(peer) {
 		peer.Start()
@@ -123,8 +133,14 @@ func (n *Node) onConnection(req *connmgr.ConnReq, conn net.Conn) {
 
 func (n *Node) onAccept(conn net.Conn) {
 	noiseConn := conn.(*brontide.Conn)
-	nLog.Infow("established inbound peer connection", "conn", conv.PubKeyToHex(noiseConn.RemotePub()))
-	peer := NewPeer(n.reactor, noiseConn, false)
+	peer, err := NewPeer(n.reactor, noiseConn, false)
+
+	if err != nil {
+		nLog.Errorw("failed to create peer", "err", err.Error())
+		return
+	}
+
+	nLog.Infow("established inbound peer connection", "conn", peer.Identity.CompressedHex())
 
 	if n.peerBook.AddPeer(peer) {
 		peer.Start()
@@ -133,8 +149,16 @@ func (n *Node) onAccept(conn net.Conn) {
 
 func (n *Node) onDisconnection(req *connmgr.ConnReq) {
 	addr := req.Addr.(*lnwire.NetAddress)
-	nLog.Infow("peer disconnected", "conn", conv.PubKeyToHex(addr.IdentityKey))
-	n.peerBook.RemovePeer(addr.IdentityKey)
+
+	pub, err := crypto.PublicFromBTCEC(addr.IdentityKey)
+
+	if err != nil {
+		nLog.Errorw("failed to wrap public key", "err", err.Error())
+		return
+	}
+
+	nLog.Infow("peer disconnected", "conn", pub.CompressedHex())
+	n.peerBook.RemovePeer(pub)
 }
 
 func (n *Node) bootstrap(addrs []*lnwire.NetAddress) {
@@ -144,7 +168,7 @@ func (n *Node) bootstrap(addrs []*lnwire.NetAddress) {
 		wg.Add(1)
 		go (func() {
 			req := &connmgr.ConnReq{
-				Addr: addr,
+				Addr:      addr,
 				Permanent: true,
 			}
 

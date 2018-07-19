@@ -11,8 +11,22 @@ CREATE TABLE channels (
   fee_per_kw INTEGER,
   csv_delay INTEGER,
   max_accepted_htlcs INTEGER,
-  funding_key VARCHAR,
-  revocation_point VARCHAR
+  our_funding_key VARCHAR,
+  our_revocation_point VARCHAR,
+  our_payment_point VARCHAR,
+  our_delayed_payment_point VARCHAR,
+  our_htlc_point VARCHAR,
+  our_commitment_seed VARCHAR,
+  their_funding_key VARCHAR,
+  their_revocation_point VARCHAR,
+  their_payment_point VARCHAR,
+  their_delayed_payment_point VARCHAR,
+  their_htlc_point VARCHAR,
+  their_first_commitment_point VARCHAR,
+  our_signature VARCHAR,
+  their_signature VARCHAR,
+  input_id VARCHAR REFERENCES eth_utxos(id),
+  self_originated BOOLEAN
 );
 
 CREATE UNIQUE INDEX channels_finalized_id ON channels(finalized_id);

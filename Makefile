@@ -13,8 +13,10 @@ create-db-migration:
 develop:
 	@$(MAKE) -C ./solidity testnet
 
-test:
+test: compile
 	@$(MAKE) -C ./solidity test
+	go test ./pkg/...
+	go test ./internal/...
 
 compile-extract-abi:
 	go build -o build/extract-abi ./cmd/extract_abi.go

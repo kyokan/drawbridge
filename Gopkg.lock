@@ -20,7 +20,6 @@
   revision = "fdfc19097e7ac6b57035062056f5b7b4638b8898"
 
 [[projects]]
-  branch = "master"
   name = "github.com/btcsuite/btclog"
   packages = ["."]
   revision = "84c8d2346e9fc8c7b947e243b9c24e6df9fd206a"
@@ -193,7 +192,10 @@
 
 [[projects]]
   name = "github.com/magiconair/properties"
-  packages = ["."]
+  packages = [
+    ".",
+    "assert"
+  ]
   revision = "c2353362d570a7bfa228149c62842019201cfb71"
   version = "v1.8.0"
 
@@ -228,7 +230,6 @@
   version = "v0.9.0"
 
 [[projects]]
-  branch = "master"
   name = "github.com/roasbeef/btcd"
   packages = [
     "addrmgr",
@@ -448,6 +449,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "f16548dd47469e37bd5490e87a42274bbc201a27feee1ca7a7feda541dd89eef"
+  inputs-digest = "c372d7ea95a1b4443d4539e59423cd1683182220594694809e6734d468303fd6"
   solver-name = "gps-cdcl"
   solver-version = 1

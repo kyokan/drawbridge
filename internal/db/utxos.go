@@ -4,19 +4,32 @@ import (
 	"github.com/kyokan/drawbridge/pkg/types"
 	"database/sql"
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	"bytes"
 	"time"
 	"math/big"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/kyokan/drawbridge/internal/conv"
 )
 
 type UTXOs interface {
 	SavePoll(utxos []*types.EthUTXO, blockNum *big.Int) error
 	LastPoll() (*big.Int, error)
 	FindById(id [32]byte) *types.EthUTXO
+	FindSpendableByOwnerAmount(amount *big.Int, owner common.Address) (*types.EthUTXO, error)
 }
 
 type PostgresUTXOs struct {
 	db *sql.DB
+}
+
+type rawUtxo struct {
+	Owner       string
+	Value       string
+	BlockNumber string
+	TxHash      string
+	ID          string
+	InputID     string
+	IsWithdrawn bool
+	IsSpent     bool
 }
 
 func (p *PostgresUTXOs) SavePoll(utxos []*types.EthUTXO, blockNum *big.Int) error {
@@ -59,7 +72,7 @@ func (p *PostgresUTXOs) SavePoll(utxos []*types.EthUTXO, blockNum *big.Int) erro
 					utxo.IsWithdrawn,
 				)
 
-				if err == nil && !bytes.Equal(utxo.InputID[:], types.ZeroUTXOID[:]) {
+				if err == nil && utxo.InputID != types.ZeroUTXOID {
 					_, err = updateSpent.Exec(true, utxo.InputID)
 				}
 			}
@@ -97,4 +110,62 @@ func (p *PostgresUTXOs) LastPoll() (*big.Int, error) {
 
 func (p *PostgresUTXOs) FindById(id [32]byte) *types.EthUTXO {
 	return nil
+}
+
+func (p *PostgresUTXOs) FindSpendableByOwnerAmount(amount *big.Int, owner common.Address) (*types.EthUTXO, error) {
+	raw := &rawUtxo{}
+
+	row := p.db.QueryRow(
+		"SELECT id, owner, value, block_number, tx_hash, input_id, withdrawn, spent FROM eth_utxos WHERE owner = $1 AND value = $2",
+		owner.Hex(),
+		amount.Text(10),
+	)
+	err := row.Scan(&raw.ID, &raw.Owner, &raw.Value, &raw.BlockNumber, &raw.TxHash, &raw.InputID, &raw.IsWithdrawn, &raw.IsSpent)
+
+	if err != nil {
+		return nil, err
+	}
+
+	value, err := conv.StringToBig(raw.Value)
+
+	if err != nil {
+		return nil, err
+	}
+
+	blockNumber, err := conv.StringToBig(raw.BlockNumber)
+
+	if err != nil {
+		return nil, err
+	}
+
+	txHash, err := conv.HexToBytes32(raw.TxHash)
+
+	if err != nil {
+		return nil, err
+	}
+
+	id, err := conv.HexToBytes32(raw.ID)
+
+	if err != nil {
+		return nil, err
+	}
+
+	inputId, err := conv.HexToBytes32(raw.InputID)
+
+	if err != nil {
+		return nil, err
+	}
+
+	utxo := &types.EthUTXO{
+		Owner:       common.HexToAddress(raw.Owner),
+		Value:       value,
+		BlockNumber: blockNumber,
+		TxHash:      txHash,
+		ID:          id,
+		InputID:     inputId,
+		IsWithdrawn: raw.IsWithdrawn,
+		IsSpent:     raw.IsSpent,
+	}
+
+	return utxo, nil
 }

@@ -8,9 +8,10 @@ import (
 )
 
 type DB struct {
-	UTXOs UTXOs
-	dbUrl string
-	db *sql.DB
+	UTXOs    UTXOs
+	Channels Channels
+	dbUrl    string
+	db       *sql.DB
 }
 
 func NewDB(dbUrl string) (*DB, error) {
@@ -34,8 +35,11 @@ func NewDB(dbUrl string) (*DB, error) {
 		UTXOs: &PostgresUTXOs{
 			db: db,
 		},
+		Channels: &PostgresChannels{
+			db: db,
+		},
 		dbUrl: dbUrl,
-		db: db,
+		db:    db,
 	}, nil
 }
 

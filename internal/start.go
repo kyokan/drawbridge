@@ -73,25 +73,22 @@ func Start() {
 	}
 
 	config := &pkg.Config{
-		ChainHashes: chainHashes,
-		P2PAddr: stringFlag("p2p-ip"),
-		P2PPort: stringFlag("p2p-port"),
+		ChainHashes:    chainHashes,
+		P2PAddr:        stringFlag("p2p-ip"),
+		P2PPort:        stringFlag("p2p-port"),
 		BootstrapPeers: viper.GetStringSlice("bootstrap-peers"),
+		SigningPubkey:  km.PublicKey(),
 	}
 
-	handlers := &p2p.Handlers{
-		Ping: &p2p.Ping{},
-		ChannelEstablishment: &p2p.ChannelEstablishment{
-			Config: config,
-			DB:     database,
-		},
-	}
+	peerBook := p2p.NewPeerBook()
 
-	reactor := p2p.NewReactor(handlers)
+	cMgr := channel.NewFundingManager(peerBook, database, km, client, config)
 
-	node, err := p2p.NewNode(reactor, config)
+	reactor := p2p.NewReactor([]p2p.MsgHandler{
+		cMgr,
+	})
 
-	cMgr := channel.NewManager(node)
+	node, err := p2p.NewNode(reactor, peerBook, config)
 
 	container := &api.ServiceContainer{
 		FundingService: api.NewFundingService(client, cMgr),

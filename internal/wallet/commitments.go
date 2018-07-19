@@ -7,7 +7,7 @@ import (
 	"crypto/rand"
 )
 
-func GenCommitmentRoot() ([]byte, error) {
+func Rand32() ([]byte, error) {
 	b := make([]byte, 32)
 	_, err := rand.Read(b)
 
@@ -32,4 +32,20 @@ func CommitmentAtIndex(root []byte, index uint64) (*btcec.PublicKey, error) {
 	}
 
 	return lnwallet.ComputeCommitmentPoint(preimage[:]), nil
+}
+
+func FirstCommitmentPoint() ([]byte,  *btcec.PublicKey, error) {
+	seed, err := Rand32()
+
+	if err != nil {
+		return nil, nil, err
+	}
+
+	commitment, err := CommitmentAtIndex(seed, 0)
+
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return seed, commitment, nil
 }

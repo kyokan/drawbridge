@@ -184,7 +184,7 @@ contract UTXOToken {
         require(multisig.valueB > 0);
         require(multisig.valueA + multisig.valueB == encumbrance.valueA + encumbrance.valueB);
 
-        bytes32 encumbranceHash = sha256(encumbranceBytes.slice(0, ENCUMBRANCE_SIZE - 130));
+        bytes32 encumbranceHash = keccak256(encumbranceBytes.slice(0, ENCUMBRANCE_SIZE - 130));
         require(verify(encumbranceHash, multisig.signerA, encumbrance.sigA));
         require(verify(encumbranceHash, multisig.signerB, encumbrance.sigB));
 
@@ -218,7 +218,7 @@ contract UTXOToken {
         BytesBuffer.Buffer memory buf = BytesBuffer.Buffer(new bytes(33), 0);
         buf.putByte(MULTISIG_SIGIL);
         buf.putBytes32(id);
-        bytes32 hash = sha256(buf.data);
+        bytes32 hash = keccak256(buf.data);
         require(verify(hash, multisig.signerA, sigA));
         require(verify(hash, multisig.signerB, sigB));
         exitMultisig(multisig);
@@ -239,7 +239,7 @@ contract UTXOToken {
             breacher = multisig.signerA;
         }
 
-        bytes32 hash = sha256(preimage);
+        bytes32 hash = keccak256(preimage);
 
         if (multisig.hashLock == hash) {
             uint total = multisig.valueA + multisig.valueB;
@@ -270,7 +270,7 @@ contract UTXOToken {
         buf.putBytes32(idB);
         buf.putAddress(addrA);
         buf.putAddress(addrB);
-        return sha256(buf.data);
+        return keccak256(buf.data);
     }
 
     function exitMultisig(Multisig multisig) private {
@@ -303,7 +303,7 @@ contract UTXOToken {
     }
 
     function genMultisigId(address signerA, address signerB, bytes32 idA, bytes32 idB) private returns (bytes32) {
-        return keccak256(signerA, signerB, idA, idB);
+        return keccak256(idA, idB, signerA, signerB);
     }
 
     function verify(bytes32 data, address expected, bytes sig) returns (bool) {
@@ -338,6 +338,6 @@ contract UTXOToken {
 
     function hashEncumbrance(bytes encumbranceBytes) private returns (bytes32) {
         bytes memory toHash = encumbranceBytes.slice(0, encumbranceBytes.length - 130);
-        return sha256(toHash);
+        return keccak256(toHash);
     }
 }

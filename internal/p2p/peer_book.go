@@ -1,15 +1,14 @@
 package p2p
 
 import (
-	"github.com/roasbeef/btcd/btcec"
-	"github.com/kyokan/drawbridge/internal/conv"
 	"sync"
+	"github.com/kyokan/drawbridge/pkg/crypto"
 )
 
 type PeerBook struct {
 	peerIndices map[string]uint16
 	peers       map[uint16]*Peer
-	mut         *sync.Mutex
+	mut         sync.Mutex
 	lastIdx     uint16
 }
 
@@ -17,18 +16,17 @@ func NewPeerBook() *PeerBook {
 	return &PeerBook{
 		peerIndices: make(map[string]uint16),
 		peers:       make(map[uint16]*Peer),
-		mut:         &sync.Mutex{},
 		lastIdx:     0,
 	}
 }
 
-func (p *PeerBook) FindPeer(pub *btcec.PublicKey) (*Peer) {
+func (p *PeerBook) FindPeer(pub *crypto.PublicKey) (*Peer) {
 	p.mut.Lock()
 	defer p.mut.Unlock()
 
-	peerIdx := p.peerIndices[conv.PubKeyToHex(pub)]
+	peerIdx, exists := p.peerIndices[pub.CompressedHex()]
 
-	if peerIdx == 0 {
+	if !exists {
 		return nil
 	}
 
@@ -39,9 +37,9 @@ func (p *PeerBook) AddPeer(peer *Peer) bool {
 	p.mut.Lock()
 	defer p.mut.Unlock()
 
-	keyStr := conv.PubKeyToHex(peer.Identity)
+	keyStr := peer.Identity.CompressedHex()
 
-	if p.peerIndices[keyStr] != 0 {
+	if _, exists := p.peerIndices[keyStr]; exists {
 		return false
 	}
 
@@ -51,13 +49,13 @@ func (p *PeerBook) AddPeer(peer *Peer) bool {
 	return true
 }
 
-func (p *PeerBook) RemovePeer(pub *btcec.PublicKey) bool {
+func (p *PeerBook) RemovePeer(pub *crypto.PublicKey) bool {
 	p.mut.Lock()
 	defer p.mut.Unlock()
 
-	keyStr := conv.PubKeyToHex(pub)
+	keyStr := pub.CompressedHex()
 
-	if p.peerIndices[keyStr] == 0 {
+	if _, exists := p.peerIndices[keyStr]; !exists {
 		return false
 	}
 

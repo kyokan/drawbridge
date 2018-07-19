@@ -55,3 +55,7 @@
 [[override]]
   name = "github.com/lightninglabs/neutrino"
   revision = "36d9a509ff4ea1e916a73c6f1c2b784c1faf11ed"
+
+[[constraint]]
+  name = "github.com/stretchr/testify"
+  version = "1.1.4"

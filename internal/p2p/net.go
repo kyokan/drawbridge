@@ -5,12 +5,11 @@ import (
 	"github.com/lightningnetwork/lnd/lnwire"
 	"strings"
 	"errors"
-	"github.com/roasbeef/btcd/btcec"
-	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/kyokan/drawbridge/pkg/crypto"
 )
 
 func ResolveAddrs(addrs []string) ([]*lnwire.NetAddress, error) {
-	out := make([]*lnwire.NetAddress, len(addrs))
+	var out []*lnwire.NetAddress
 
 	for _, a := range addrs {
 		splits := strings.Split(a, "|")
@@ -28,20 +27,14 @@ func ResolveAddrs(addrs []string) ([]*lnwire.NetAddress, error) {
 			return nil, err
 		}
 
-		keyBytes, err := hexutil.Decode(pub)
-
-		if err != nil {
-			return nil, err
-		}
-
-		identityKey, err := btcec.ParsePubKey(keyBytes, btcec.S256())
+		identityKey, err := crypto.PublicFromCompressedHex(pub)
 
 		if err != nil {
 			return nil, err
 		}
 
 		addr := &lnwire.NetAddress{
-			IdentityKey: identityKey,
+			IdentityKey: identityKey.BTCEC(),
 			Address: resolved,
 		}
 

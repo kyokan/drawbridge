@@ -6,8 +6,8 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"go.uber.org/zap"
 	"github.com/kyokan/drawbridge/internal/logger"
-	"github.com/roasbeef/btcd/btcec"
 	"github.com/kyokan/drawbridge/internal/channel"
+	"github.com/kyokan/drawbridge/pkg/crypto"
 )
 
 var fsLog *zap.SugaredLogger
@@ -18,10 +18,10 @@ func init() {
 
 type FundingService struct {
 	client *eth.Client
-	cMgr   *channel.Manager
+	cMgr   *channel.FundingManager
 }
 
-func NewFundingService(client *eth.Client, cMgr *channel.Manager) (*FundingService) {
+func NewFundingService(client *eth.Client, cMgr *channel.FundingManager) (*FundingService) {
 	return &FundingService{
 		client: client,
 		cMgr:   cMgr,
@@ -126,19 +126,13 @@ func (f *FundingService) OpenChannel(r *http.Request, args *OpenChannelArgs, rep
 		)
 	}
 
-	pubBytes, err := hexutil.Decode(args.PeerPubkey)
+	pub, err := crypto.PublicFromCompressedHex(args.PeerPubkey)
 
 	if err != nil {
 		return err
 	}
 
-	pub, err := btcec.ParsePubKey(pubBytes, btcec.S256())
-
-	if err != nil {
-		return err
-	}
-
-	err = f.cMgr.OpenChannel(pub, amountBig)
+	err = f.cMgr.InitChannel(pub, amountBig)
 
 	if err != nil {
 		return err

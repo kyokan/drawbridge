@@ -17,7 +17,7 @@ func TestMultisig_Hashable(t *testing.T) {
 }
 
 func TestMultisig_Hash(t *testing.T) {
-	expected := "0x17c5573674d583a72ce017c2c19e2b68c9770e3b24f39fedc600c8b743c4e69b"
+	expected := "0xbf9b4ded5bab4451cfaaaa0f4f921af211fa387d89268b9e9910aafa8bd7326b"
 	multisig := makeMultisig()
 	hash := multisig.Hash()
 	actual := hexutil.Encode(hash[:])

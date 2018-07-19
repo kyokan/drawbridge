@@ -10,15 +10,13 @@ import (
 	"sync/atomic"
 	"sync"
 	"github.com/lightningnetwork/lnd/brontide"
-	"github.com/roasbeef/btcd/btcec"
-	"github.com/kyokan/drawbridge/internal/conv"
-	"fmt"
+	"github.com/kyokan/drawbridge/pkg/crypto"
 )
 
 var pLog *zap.SugaredLogger
 
 const idleTimeout = time.Minute * 5
-const pingInterval = time.Second * 5
+const pingInterval = time.Minute * 1
 
 func init() {
 	pLog = logger.Logger.Named("peer")
@@ -31,28 +29,35 @@ type Peer struct {
 	writeBuf       *[65535]byte
 	incomingQueue  chan *Envelope
 	outgoingQueue  chan *Envelope
+	errChan        chan error
 	disconnected   uint32
 	wg             *sync.WaitGroup
 
-	Identity *btcec.PublicKey
+	Identity *crypto.PublicKey
 }
 
-func NewPeer(reactor *Reactor, conn *brontide.Conn, selfOriginated bool) *Peer {
+func NewPeer(reactor *Reactor, conn *brontide.Conn, selfOriginated bool) (*Peer, error) {
+	identity, err := crypto.PublicFromBTCEC(conn.RemotePub())
+
+	if err != nil {
+		return nil, err
+	}
+
 	return &Peer{
 		reactor:        reactor,
 		conn:           conn,
 		selfOriginated: selfOriginated,
 		writeBuf:       new([65535]byte),
-		incomingQueue:  make(chan *Envelope, 10),
-		outgoingQueue:  make(chan *Envelope, 10),
+		incomingQueue:  make(chan *Envelope),
+		outgoingQueue:  make(chan *Envelope),
+		errChan:        make(chan error),
 		disconnected:   0,
 		wg:             new(sync.WaitGroup),
-		Identity:       conn.RemotePub(),
-	}
+		Identity:       identity,
+	}, nil
 }
 
 func (p *Peer) Start() {
-	fmt.Println("start peer")
 	p.reactor.AddEnvelopeChan(p.incomingQueue, p.outgoingQueue)
 
 	go p.readHandler()
@@ -73,7 +78,7 @@ func (p *Peer) Stop() (error) {
 	return p.conn.Close()
 }
 
-func (p * Peer) Send(msg lnwire.Message) error {
+func (p *Peer) Send(msg lnwire.Message) error {
 	p.outgoingQueue <- NewEnvelope(p, msg)
 	return nil
 }
@@ -182,5 +187,5 @@ func (p *Peer) writeMessage(msg lnwire.Message) error {
 }
 
 func (p *Peer) String() string {
-	return conv.PubKeyToHex(p.Identity)
+	return p.Identity.CompressedHex()
 }

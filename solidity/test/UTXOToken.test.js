@@ -1,6 +1,6 @@
 const TestToken = artifacts.require('TestToken');
 const UTXOToken = artifacts.require('UTXOToken');
-const crypto = require('crypto');
+const ethUtil = require('ethereumjs-util');
 
 const MULTISIG_SIGIL = '02';
 
@@ -454,9 +454,9 @@ contract('UTXOToken', (accounts) => {
         const logs = res.logs;
 
         assert.strictEqual(logs.length, 1);
-        
+
         const utxo = logs[0].args;
-        
+
         assert.strictEqual(utxo.owner, accounts[0]);
         assert.strictEqual(utxo.value.toNumber(), 1000);
         assert.isString(utxo.id);
@@ -517,8 +517,6 @@ function parseUtxoStruct(indexed) {
 }
 
 function sha256(buf, retBuf) {
-  const hash = crypto.createHash('sha256');
-  hash.update(buf);
-  const digest = hash.digest();
-  return retBuf ? digest : '0x' + digest.toString('hex');
+  const out = ethUtil.keccak256(buf);
+  return retBuf ? out : '0x' + out.toString('hex');
 }

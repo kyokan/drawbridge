@@ -2,11 +2,12 @@ package wallet
 
 import (
 	"crypto/ecdsa"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/core/types"
+	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"math/big"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"fmt"
+	"github.com/kyokan/drawbridge/pkg/crypto"
 )
 
 type KeyManager struct {
@@ -17,7 +18,7 @@ type KeyManager struct {
 const SignaturePreamble = "\x19Ethereum Signed Message:\n"
 
 func NewKeyManager(keyHex string, chainId *big.Int) (*KeyManager, error) {
-	key, err := crypto.HexToECDSA(keyHex)
+	key, err := ethcrypto.HexToECDSA(keyHex)
 
 	if err != nil {
 		return nil, err
@@ -39,10 +40,10 @@ func (c *KeyManager) NewTransactor(gasOverride uint64) (*bind.TransactOpts) {
 	return res
 }
 
-func (c *KeyManager) SignData(data []byte) ([]byte, error) {
+func (c *KeyManager) SignData(data []byte) (crypto.Signature, error) {
 	msg := fmt.Sprintf("%s%d%s", SignaturePreamble, len(data), data)
-	hash := crypto.Keccak256([]byte(msg))
-	res, err := crypto.Sign(hash, c.key)
+	hash := ethcrypto.Keccak256([]byte(msg))
+	res, err := ethcrypto.Sign(hash, c.key)
 
 	if err != nil {
 		return nil, err
@@ -59,4 +60,16 @@ func (c *KeyManager) SignTx(tx *types.Transaction) (*types.Transaction, error) {
 	}
 
 	return tx, nil
+}
+
+func (c *KeyManager) PublicKey() *crypto.PublicKey {
+	k, err := crypto.PublicFromOtherPublic(c.key.Public())
+
+	if err != nil {
+		// should never happen since the private key is
+		// validated upon struct construction
+		panic(err)
+	}
+
+	return k
 }

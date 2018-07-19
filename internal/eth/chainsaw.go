@@ -86,6 +86,8 @@ func (c *Chainsaw) Start() {
 	for {
 		c.awaitNextTick()
 
+		nextBlock := c.lastBlock.Add(c.lastBlock, big.NewInt(1))
+
 		blockHeight, err := c.client.BlockHeight()
 
 		if err != nil {
@@ -95,12 +97,12 @@ func (c *Chainsaw) Start() {
 
 		confirmedBlockHeight := blockHeight.Sub(blockHeight, ConfirmationCount)
 
-		if confirmedBlockHeight.Cmp(c.lastBlock) == 0 {
+		if confirmedBlockHeight.Cmp(nextBlock) <= 0 {
 			csLog.Infow("already at latest block")
 			continue
 		}
 
-		logs, err := c.client.FilterUTXOContract(c.lastBlock, confirmedBlockHeight)
+		logs, err := c.client.FilterUTXOContract(nextBlock, confirmedBlockHeight)
 
 		if err != nil {
 			csLog.Warnw("failed to filter UTXO contract", "err", err.Error())

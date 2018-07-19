@@ -2,8 +2,16 @@ package pkg
 
 import (
 	"github.com/roasbeef/btcd/chaincfg/chainhash"
-	"github.com/roasbeef/btcd/btcec"
+	"github.com/kyokan/drawbridge/pkg/crypto"
 )
+
+type Config struct {
+	ChainHashes    *ChainHashes
+	SigningPubkey  *crypto.PublicKey
+	P2PAddr        string
+	P2PPort        string
+	BootstrapPeers []string
+}
 
 type ChainHashes struct {
 	TestToken chainhash.Hash
@@ -28,12 +36,4 @@ func (h *ChainHashes) ValidChainHash(hash chainhash.Hash) bool {
 	default:
 		return false
 	}
-}
-
-type Config struct {
-	ChainHashes    *ChainHashes
-	SigningPubkey  *btcec.PublicKey
-	P2PAddr        string
-	P2PPort        string
-	BootstrapPeers []string
 }
