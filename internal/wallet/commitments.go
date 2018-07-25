@@ -18,6 +18,18 @@ func Rand32() ([]byte, error) {
 	return b, nil
 }
 
+func Rand32Array() ([32]byte, error) {
+	var out [32]byte
+	res, err := Rand32()
+
+	if err != nil {
+		return out, err
+	}
+
+	copy(out[:], res)
+	return out, nil
+}
+
 func CommitmentAtIndex(root []byte, index uint64) (*btcec.PublicKey, error) {
 	producer, err := shachain.NewRevocationProducerFromBytes(root)
 

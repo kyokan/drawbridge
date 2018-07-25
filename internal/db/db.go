@@ -10,6 +10,7 @@ import (
 type DB struct {
 	UTXOs    UTXOs
 	Channels Channels
+	HTLCs    HTLCs
 	dbUrl    string
 	db       *sql.DB
 }
