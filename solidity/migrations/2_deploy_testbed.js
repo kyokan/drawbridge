@@ -1,7 +1,7 @@
 var TestToken = artifacts.require('./TestToken.sol');
-var Lightning = artifacts.require('./Lightning.sol');
+var LightningERC20 = artifacts.require('./LightningERC20.sol');
 
 module.exports = function(deployer) {
   deployer.deploy(TestToken)
-    .then((instance) => deployer.deploy(Lightning, instance.address))
+    .then((instance) => deployer.deploy(LightningERC20, instance.address))
 };

@@ -1,10 +1,10 @@
 const TestToken = artifacts.require('TestToken');
-const Lightning = artifacts.require('Lightning');
+const LightningERC20 = artifacts.require('LightningERC20');
 const abi = require('ethereumjs-abi');
 const ethUtil = require('ethereumjs-util');
 const BN = require('bn.js');
 
-contract('Lightning', (accounts) => {
+contract('LightningERC20', (accounts) => {
   const ZERO_32 = '0x0000000000000000000000000000000000000000000000000000000000000000';
 
   const ZERO_BYTES = '0x0';
@@ -35,7 +35,6 @@ contract('Lightning', (accounts) => {
       });
 
       it('should emit a NewOutput event', async () => {
-        assert.strictEqual(log.lockTime.toNumber(), 0);
         assert.strictEqual(log.value.toNumber(), depositedTokens);
         assert.isNumber(log.blockNum.toNumber());
         assert.strictEqual(log.script, '0x01627306090abab3a6e1400e9345bc60c78a8bef57');
@@ -45,7 +44,6 @@ contract('Lightning', (accounts) => {
       it('should store an Output', async () => {
         const id = log.id;
         const output = parseOutputStruct(await lightningContract.outputs.call(id));
-        assert.strictEqual(output.lockTime, 0);
         assert.strictEqual(output.value, depositedTokens);
         assert.isNumber(output.blockNum);
         assert.strictEqual(output.script, '0x01627306090abab3a6e1400e9345bc60c78a8bef57');
@@ -86,7 +84,7 @@ contract('Lightning', (accounts) => {
           createPayableOutput(mintedTokens - sentAmount, accounts[0]),
         );
         res = await lightningContract.spend(
-          await createPayableInput(inputId, accounts[0], outputs),
+          await createPayableWitness(inputId, accounts[0], outputs),
           outputs
         );
 
@@ -95,29 +93,25 @@ contract('Lightning', (accounts) => {
       });
 
       it('should emit the correct NewOutput events', () => {
-        assert.strictEqual(spent.lockTime.toNumber(), 0);
         assert.strictEqual(spent.value.toNumber(), sentAmount);
         assert.isNumber(spent.blockNum.toNumber());
         assert.strictEqual(spent.script, '0x01f17f52151ebef6c7334fad080c5704d77216b732');
         assert.strictEqual(spent.id.toNumber(), 3);
 
-        assert.strictEqual(change.lockTime.toNumber(), 0);
         assert.strictEqual(change.value.toNumber(), mintedTokens - sentAmount);
         assert.isNumber(change.blockNum.toNumber());
         assert.strictEqual(change.script, '0x01627306090abab3a6e1400e9345bc60c78a8bef57');
         assert.strictEqual(change.id.toNumber(), 4);
       });
 
-      it('should store the correct utxos', async () => {
+      it('should store the correct Output', async () => {
         const spentOut = parseOutputStruct(await lightningContract.outputs.call(spent.id));
-        assert.strictEqual(spentOut.lockTime, 0);
         assert.strictEqual(spentOut.value, sentAmount);
         assert.isNumber(spentOut.blockNum);
         assert.strictEqual(spentOut.script, '0x01f17f52151ebef6c7334fad080c5704d77216b732');
         assert.strictEqual(spentOut.id, 3);
 
         const changeOut = parseOutputStruct(await lightningContract.outputs.call(change.id));
-        assert.strictEqual(changeOut.lockTime, 0);
         assert.strictEqual(changeOut.value, mintedTokens - sentAmount);
         assert.isNumber(changeOut.blockNum);
         assert.strictEqual(changeOut.script, '0x01627306090abab3a6e1400e9345bc60c78a8bef57');
@@ -133,14 +127,13 @@ contract('Lightning', (accounts) => {
         const inputId = res.logs[0].args.id;
         const output = createPayableOutput(mintedTokens, accounts[1]);
         res = await lightningContract.spend(
-          await createPayableInput(inputId, accounts[0], output),
+          await createPayableWitness(inputId, accounts[0], output),
           output
         );
         spent = res.logs[0].args;
       });
 
       it('should emit the correct NewOutput event', () => {
-        assert.strictEqual(spent.lockTime.toNumber(), 0);
         assert.strictEqual(spent.value.toNumber(), mintedTokens);
         assert.isNumber(spent.blockNum.toNumber());
         assert.strictEqual(spent.script, '0x01f17f52151ebef6c7334fad080c5704d77216b732');
@@ -149,7 +142,6 @@ contract('Lightning', (accounts) => {
 
       it('should store the correct utxos', async () => {
         const spentOut = parseOutputStruct(await lightningContract.outputs.call(spent.id));
-        assert.strictEqual(spentOut.lockTime, 0);
         assert.strictEqual(spentOut.value, mintedTokens);
         assert.isNumber(spentOut.blockNum);
         assert.strictEqual(spentOut.script, '0x01f17f52151ebef6c7334fad080c5704d77216b732');
@@ -183,6 +175,206 @@ contract('Lightning', (accounts) => {
         await assertThrows(() => lightningContract.spend(inputId, accounts[1], mintedTokens + 1, ZERO_BYTES));
       });
     });
+
+    describe('funding a multisig', () => {
+      let spent;
+
+      let change;
+
+      let multi;
+
+      before(async () => {
+        let res = await lightningContract.deposit(mintedTokens);
+        const inputId = res.logs[0].args.id;
+        const outputs = concatOutputs(
+          createPayableOutput(sentAmount, accounts[1]),
+          createPayableOutput(mintedTokens - sentAmount, accounts[0]),
+        );
+        res = await lightningContract.spend(
+          await createPayableWitness(inputId, accounts[0], outputs),
+          outputs
+        );
+
+        spent = res.logs[0].args;
+        change = res.logs[1].args;
+
+        const multisig = createMultisigOutput(mintedTokens, accounts[0], accounts[1]);
+        const inputA = await createPayableWitness(spent.id, accounts[1], multisig);
+        const inputB = await createPayableWitness(change.id, accounts[0], multisig);
+        const inputs = concatOutputs(inputA, inputB);
+
+        res = await lightningContract.spend(
+          inputs,
+          multisig
+        );
+
+        multi = res.logs[0].args;
+      });
+
+      it('should emit the correct NewOutput event', () => {
+        assert.strictEqual(multi.value.toNumber(), mintedTokens);
+        assert.isNumber(multi.blockNum.toNumber());
+        assert.strictEqual(multi.script, `0x02${strip0x(accounts[0])}${strip0x(accounts[1])}`);
+        assert.strictEqual(multi.id.toNumber(), 11);
+      });
+
+      it('should store the correct Output', async () => {
+        const multiOut = parseOutputStruct(await lightningContract.outputs.call(multi.id));
+        assert.strictEqual(multiOut.value, mintedTokens);
+        assert.isNumber(multiOut.blockNum);
+        assert.strictEqual(multiOut.script, `0x02${strip0x(accounts[0])}${strip0x(accounts[1])}`);
+        assert.strictEqual(multiOut.id, 11);
+      });
+
+      it('should revert if only one party signs', async () => {
+        const output = createPayableOutput(mintedTokens, accounts[0]);
+        const idBuf = new BN(multi.id.toString()).toArrayLike(Buffer, 'be', 32);
+        const lenBuf = new BN(131).toArrayLike(Buffer, 'be', 16);
+        const dataBuf = Buffer.from('00', 'hex');
+
+        const sigBuf = Buffer.concat([
+          idBuf,
+          dataBuf,
+          Buffer.from(strip0x(output), 'hex')
+        ]);
+
+        const hash = ethUtil.keccak256(sigBuf);
+
+        const sig = await web3.eth.sign(accounts[0], '0x' + hash.toString('hex'));
+
+        const inputBufZeroSig = Buffer.concat([
+          idBuf,
+          lenBuf,
+          dataBuf,
+          Buffer.from(strip0x(sig), 'hex'),
+          Buffer.alloc(65)
+        ]);
+
+        await assertThrows(() => lightningContract.spend('0x' + inputBufZeroSig.toString('hex'), output));
+
+        const inputBufSingleSig = Buffer.from([
+          idBuf,
+          new BN(66).toArrayLike(Buffer, 'be', 16),
+          dataBuf,
+          Buffer.from(strip0x(sig), 'hex'),
+        ]);
+
+        await assertThrows(() => lightningContract.spend('0x' + inputBufSingleSig.toString('hex'), output));
+      });
+
+      it('should allow spends if both parties sign', async () => {
+        const changeOutput = createPayableOutput(mintedTokens - 100, accounts[0]);
+        const spendOutput = createPayableOutput(100, accounts[1]);
+        const outputs = concatOutputs(changeOutput, spendOutput);
+        const idBuf = new BN(multi.id.toString()).toArrayLike(Buffer, 'be', 32);
+        const lenBuf = new BN(131).toArrayLike(Buffer, 'be', 16);
+        const dataBuf = Buffer.from('00', 'hex');
+
+        const sigBuf = Buffer.concat([
+          idBuf,
+          dataBuf,
+          Buffer.from(strip0x(outputs), 'hex')
+        ]);
+
+        const hash = ethUtil.keccak256(sigBuf);
+        const sigA = await web3.eth.sign(accounts[0], '0x' + hash.toString('hex'));
+        const sigB = await web3.eth.sign(accounts[1], '0x' + hash.toString('hex'));
+
+        const inputBuf = Buffer.concat([
+          idBuf,
+          lenBuf,
+          dataBuf,
+          Buffer.from(strip0x(sigA), 'hex'),
+          Buffer.from(strip0x(sigB), 'hex')
+        ]);
+
+        const res = await lightningContract.spend('0x' + inputBuf.toString('hex'), outputs);
+
+        assert.strictEqual(res.logs[0].event, 'NewOutput');
+        assert.strictEqual(res.logs[1].event, 'NewOutput');
+        assert.strictEqual(res.logs[0].args.value.toNumber(), mintedTokens - 100);
+        assert.strictEqual(res.logs[1].args.value.toNumber(), 100);
+      });
+    });
+
+    describe('to local commitments', () => {
+      let commitment;
+
+      beforeEach(async () => {
+        let res = await lightningContract.deposit(mintedTokens);
+        const inputId = res.logs[0].args.id;
+
+        const output = createLocalCommitOutput(mintedTokens, 10, accounts[0], accounts[1]);
+
+        res = await lightningContract.spend(
+          await createPayableWitness(inputId, accounts[0], output),
+          output
+        );
+
+        commitment = res.logs[0].args;
+      });
+
+      it('should not be spendable by the delayed key for locktime blocks', async () => {
+        const idBuf = new BN(commitment.id.toString()).toArrayLike(Buffer, 'be', 32);
+        const lenBuf = new BN(66).toArrayLike(Buffer, 'be', 16);
+        const dataBuf = Buffer.from('00', 'hex');
+        const output = createPayableOutput(mintedTokens, accounts[0]);
+
+        const sigBuf = Buffer.concat([
+          idBuf,
+          dataBuf,
+          Buffer.from(strip0x(output), 'hex')
+        ]);
+
+        const hash = ethUtil.keccak256(sigBuf);
+        const sig = await web3.eth.sign(accounts[0], '0x' + hash.toString('hex'));
+
+        const inputBuf = Buffer.concat([
+          idBuf,
+          lenBuf,
+          dataBuf,
+          Buffer.from(strip0x(sig), 'hex')
+        ]);
+
+        await assertThrows(() => lightningContract.spend('0x' + inputBuf.toString('hex'), output));
+
+        // skip 11 blocks
+        for (let i = 0; i < 11; i++) {
+          await tokenContract.mint(accounts[5], 100);
+        }
+
+        const res = await lightningContract.spend('0x' + inputBuf.toString('hex'), output);
+        assert.strictEqual(res.logs[0].event, 'NewOutput');
+        assert.strictEqual(res.logs[0].args.value.toNumber(), mintedTokens);
+      });
+
+      it('should be spendable by the revocation key at any time', async () => {
+        const idBuf = new BN(commitment.id.toString()).toArrayLike(Buffer, 'be', 32);
+        const lenBuf = new BN(66).toArrayLike(Buffer, 'be', 16);
+        const dataBuf = Buffer.from('01', 'hex');
+        const output = createPayableOutput(mintedTokens, accounts[1]);
+
+        const sigBuf = Buffer.concat([
+          idBuf,
+          dataBuf,
+          Buffer.from(strip0x(output), 'hex')
+        ]);
+
+        const hash = ethUtil.keccak256(sigBuf);
+        const sig = await web3.eth.sign(accounts[1], '0x' + hash.toString('hex'));
+
+        const inputBuf = Buffer.concat([
+          idBuf,
+          lenBuf,
+          dataBuf,
+          Buffer.from(strip0x(sig), 'hex')
+        ]);
+
+        const res = await lightningContract.spend('0x' + inputBuf.toString('hex'), output);
+        assert.strictEqual(res.logs[0].event, 'NewOutput');
+        assert.strictEqual(res.logs[0].args.value.toNumber(), mintedTokens);
+      });
+    });
   });
 
   describe('#withdraw', () => {
@@ -193,13 +385,20 @@ contract('Lightning', (accounts) => {
     let spent;
 
     beforeEach(async () => {
-      const dep = await lightningContract.deposit(mintedTokens);
+      await tokenContract.mint(accounts[2], mintedTokens);
+      await tokenContract.approve(lightningContract.address, mintedTokens, {
+        from: accounts[2]
+      });
+
+      const dep = await lightningContract.deposit(mintedTokens, {
+        from: accounts[2]
+      });
       const outputs = concatOutputs(
-        createPayableOutput(sentTokens, accounts[1]),
-        createPayableOutput(mintedTokens - sentTokens, accounts[0]),
+        createPayableOutput(sentTokens, accounts[3]),
+        createPayableOutput(mintedTokens - sentTokens, accounts[2]),
       );
       const res = await lightningContract.spend(
-        await createPayableInput(dep.logs[0].args.id, accounts[0], outputs),
+        await createPayableWitness(dep.logs[0].args.id, accounts[2], outputs),
         outputs
       );
       spent = res.logs[0].args;
@@ -207,11 +406,11 @@ contract('Lightning', (accounts) => {
     });
 
     it('should credit the token holder', async () => {
-      await lightningContract.withdraw(await createPayableInput(change.id, accounts[0], ZERO_BYTES), accounts[0]);
-      await lightningContract.withdraw(await createPayableInput(spent.id, accounts[1], ZERO_BYTES), accounts[1]);
-      const changeBalance = await tokenContract.balanceOf.call(accounts[0]);
-      const spentBalance = await tokenContract.balanceOf.call(accounts[1]);
-      assert.strictEqual(changeBalance.toNumber(), 1100000);
+      await lightningContract.withdraw(await createPayableWitness(change.id, accounts[2], ZERO_BYTES), accounts[2]);
+      await lightningContract.withdraw(await createPayableWitness(spent.id, accounts[3], ZERO_BYTES), accounts[3]);
+      const changeBalance = await tokenContract.balanceOf.call(accounts[2]);
+      const spentBalance = await tokenContract.balanceOf.call(accounts[3]);
+      assert.strictEqual(changeBalance.toNumber(), 99000);
       assert.strictEqual(spentBalance.toNumber(), 1000);
     });
 
@@ -229,7 +428,7 @@ contract('Lightning', (accounts) => {
   function redeployContract() {
     before(async () => {
       tokenContract = await TestToken.new();
-      lightningContract = await Lightning.new(tokenContract.address);
+      lightningContract = await LightningERC20.new(tokenContract.address);
 
       await tokenContract.mint(accounts[0], mintedTokens);
       await tokenContract.approve(lightningContract.address, mintedTokens);
@@ -249,19 +448,17 @@ async function assertThrows(func) {
 
 function parseOutputStruct(indexed) {
   return {
-    lockTime: indexed[0].toNumber(),
-    value: indexed[1].toNumber(),
-    blockNum: indexed[2].toNumber(),
-    script: indexed[3],
-    id: indexed[4].toNumber(),
+    value: indexed[0].toNumber(),
+    blockNum: indexed[1].toNumber(),
+    script: indexed[2],
+    id: indexed[3].toNumber(),
   };
 }
 
-async function createPayableInput(outputId, address, outputs) {
+async function createPayableWitness(outputId, address, outputs) {
   const witnessBuf = Buffer.concat([
     new BN(outputId.toString()).toArrayLike(Buffer, 'be', 32),
-    new BN(20).toArrayLike(Buffer, 'be', 16),
-    Buffer.from(strip0x(address), 'hex')
+    Buffer.from('00', 'hex')
   ]);
 
   const hash = ethUtil.keccak256(Buffer.concat([
@@ -272,7 +469,9 @@ async function createPayableInput(outputId, address, outputs) {
   const sig = await web3.eth.sign(address, '0x' + hash.toString('hex'));
 
   return '0x' + Buffer.concat([
-    witnessBuf,
+    new BN(outputId.toString()).toArrayLike(Buffer, 'be', 32),
+    new BN(66).toArrayLike(Buffer, 'be', 16),
+    Buffer.from('00', 'hex'),
     Buffer.from(strip0x(sig), 'hex')
   ]).toString('hex')
 }
@@ -280,9 +479,7 @@ async function createPayableInput(outputId, address, outputs) {
 function createPayableOutput(value, recipient) {
   const buf = abi.rawEncode([
     'uint',
-    'uint',
   ], [
-    0,
     value,
   ]);
 
@@ -290,6 +487,30 @@ function createPayableOutput(value, recipient) {
     buf,
     Buffer.from('01', 'hex'),
     Buffer.from(strip0x(recipient), 'hex')
+  ]).toString('hex');
+}
+
+function createMultisigOutput(value, recipA, recipB) {
+  const buf = abi.rawEncode(['uint'], [value]);
+
+  return '0x' + Buffer.concat([
+    buf,
+    Buffer.from('02', 'hex'),
+    Buffer.from(strip0x(recipA), 'hex'),
+    Buffer.from(strip0x(recipB), 'hex')
+  ]).toString('hex')
+}
+
+function createLocalCommitOutput(value, delay, delayedAddress, revocationAddress) {
+  const buf = abi.rawEncode(['uint'], [value]);
+  const delayBuf = abi.rawEncode(['uint'], [delay]);
+
+  return '0x' + Buffer.concat([
+    buf,
+    Buffer.from('03', 'hex'),
+    delayBuf,
+    Buffer.from(strip0x(delayedAddress), 'hex'),
+    Buffer.from(strip0x(revocationAddress), 'hex'),
   ]).toString('hex');
 }
 
