@@ -297,6 +297,17 @@ library BytesLib {
 
         return tempUint;
     }
+    
+    function toUint16(bytes _bytes, uint _start) internal pure returns (uint16) {
+        require(_bytes.length >= (_start + 16));
+        uint16 tempUint;
+    
+        assembly {
+            tempUint := mload(add(add(_bytes, 0x10), _start))
+        }
+    
+        return tempUint;
+    }
 
     function equal(bytes memory _preBytes, bytes memory _postBytes) internal pure returns (bool) {
         bool success = true;
