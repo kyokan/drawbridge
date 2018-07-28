@@ -6,8 +6,8 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"go.uber.org/zap"
 	"github.com/kyokan/drawbridge/internal/logger"
-	"github.com/kyokan/drawbridge/internal/channel"
 	"github.com/kyokan/drawbridge/pkg/crypto"
+	"github.com/kyokan/drawbridge/internal/protocol"
 )
 
 var fsLog *zap.SugaredLogger
@@ -17,14 +17,14 @@ func init() {
 }
 
 type FundingService struct {
-	client *ethclient.Client
-	cMgr   *channel.FundingManager
+	client      *ethclient.Client
+	chanHandler *protocol.ChannelHandler
 }
 
-func NewFundingService(client *ethclient.Client, cMgr *channel.FundingManager) (*FundingService) {
+func NewFundingService(client *ethclient.Client, chanHandler *protocol.ChannelHandler) (*FundingService) {
 	return &FundingService{
-		client: client,
-		cMgr:   cMgr,
+		client:      client,
+		chanHandler: chanHandler,
 	}
 }
 
@@ -132,7 +132,7 @@ func (f *FundingService) OpenChannel(r *http.Request, args *OpenChannelArgs, rep
 		return err
 	}
 
-	err = f.cMgr.InitChannel(pub, amountBig)
+	err = f.chanHandler.InitChannel(pub, amountBig)
 
 	if err != nil {
 		return err

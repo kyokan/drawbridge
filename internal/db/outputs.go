@@ -27,10 +27,6 @@ type PolledOutputs struct {
 }
 
 func (p *PostgresOutputs) SavePoll(outputs *PolledOutputs, blockNum uint64) error {
-	if len(outputs.New) == 0 && len(outputs.Spent) == 0 && len(outputs.Withdrawn) == 0 {
-		return nil
-	}
-
 	return NewTransactor(p.db, func(tx *sql.Tx) error {
 		if len(outputs.New) > 0 {
 			stmt, err := tx.Prepare(`

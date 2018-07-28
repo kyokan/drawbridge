@@ -20,9 +20,9 @@ type ChannelHandler struct {
 	peerBook        *p2p.PeerBook
 	km              *wallet.KeyManager
 	client          *ethclient.Client
+	db              *db.DB
 	pendingChannels map[chanId]*pendingChannel
 	mtx             sync.Mutex
-	db              *db.DB
 }
 
 type pendingChannel struct {
@@ -30,6 +30,16 @@ type pendingChannel struct {
 	FundingAmount    *big.Int
 	OurFundingKey    *crypto.PublicKey
 	TheirFundingKey  *crypto.PublicKey
+}
+
+func NewChannelHandler(peerBook *p2p.PeerBook, km *wallet.KeyManager, client *ethclient.Client, db *db.DB) *ChannelHandler {
+	return &ChannelHandler{
+		peerBook:peerBook,
+		km: km,
+		client: client,
+		db: db,
+		pendingChannels: make(map[chanId]*pendingChannel),
+	}
 }
 
 func (c *ChannelHandler) InitChannel(pub *crypto.PublicKey, amount *big.Int) error {

@@ -8,11 +8,7 @@ import (
 )
 
 func HexToBig(hex string) (*big.Int, error) {
-	num, ok := math.ParseBig256(hex)
-	if !ok {
-		return nil, errors.New("invalid hex")
-	}
-	return num, nil
+	return hexutil.DecodeBig(hex)
 }
 
 func StringToBig(num string) (*big.Int, error) {
@@ -39,5 +35,5 @@ func BigToBytes(n *big.Int) []byte {
 }
 
 func BigToHex(n *big.Int) string {
-	return hexutil.Encode(BigToBytes(n))
+	return hexutil.EncodeBig(n)
 }

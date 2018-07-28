@@ -15,15 +15,15 @@ import (
 
 var csLog *zap.SugaredLogger
 
-var utxoAbi abi.ABI
+var lightningABI abi.ABI
 
-var ConfirmationCount = big.NewInt(0)
+const ConfirmationCount = 0
 
-var DepositEventSignature = crypto.Keccak256Hash([]byte("Deposit(address,uint256,bytes32)"))
+var CreateSignature = crypto.Keccak256Hash([]byte("Create(uint256,uint256,bytes,uint256)"))
 
-var OutputEventSignature = crypto.Keccak256Hash([]byte("Output(bytes32,address,uint256,bytes32)"))
+var SpendSignature = crypto.Keccak256Hash([]byte("Spend(uint256)"))
 
-var WithdrawalEventSignature = crypto.Keccak256Hash([]byte("Withdrawal(address,uint256,bytes32)"))
+var WithdrawalSignature = crypto.Keccak256Hash([]byte("Withdrawal(address,uint256)"))
 
 func init() {
 	csLog = logger.Logger.Named("chainsaw")
@@ -35,25 +35,29 @@ func init() {
 		panic(err)
 	}
 
-	utxoAbi = uAbi
+	lightningABI = uAbi
 }
 
-type OutputEvent struct {
-	InputId [32]byte
-	Owner   common.Address
-	Value   *big.Int
-	Id      [32]byte
+type CreateEvent struct {
+	Owner    common.Address
+	Value    *big.Int
+	BlockNum *big.Int
+	Script   []byte
+	Id       *big.Int
 }
 
 type WithdrawalEvent struct {
 	Owner common.Address
 	Value *big.Int
-	Id    [32]byte
+}
+
+type SpendEvent struct {
+	Id *big.Int
 }
 
 type Chainsaw struct {
 	client    *Client
-	lastBlock *big.Int
+	lastBlock uint64
 	db        *db.DB
 	lastTick  time.Time
 }
@@ -61,7 +65,7 @@ type Chainsaw struct {
 func NewChainsaw(client *Client, db *db.DB) *Chainsaw {
 	return &Chainsaw{
 		client:    client,
-		lastBlock: big.NewInt(0),
+		lastBlock: 0,
 		db:        db,
 	}
 }
@@ -82,23 +86,60 @@ func (c *Chainsaw) Start() {
 
 	for {
 		c.awaitNextTick()
-		nextBlock := c.lastBlock.Add(c.lastBlock, big.NewInt(1))
+		nextBlock := c.lastBlock + 1
 		blockHeight, err := c.client.BlockHeight()
 		if err != nil {
 			csLog.Warnw("failed to get block height", "err", err.Error())
 			continue
 		}
 
-		confirmedBlockHeight := blockHeight.Sub(blockHeight, ConfirmationCount)
-		if confirmedBlockHeight.Cmp(nextBlock) <= 0 {
+		confirmedBlockHeight := blockHeight - ConfirmationCount
+		if confirmedBlockHeight < nextBlock {
 			csLog.Infow("already at latest block")
 			continue
 		}
 
+		logs, err := c.client.FilterContract(nextBlock, confirmedBlockHeight)
 		if err != nil {
-			csLog.Warnw("failed to filter UTXO contract", "err", err.Error())
+			csLog.Warnw("failed to filter contract", "err", err)
+			continue
 		}
 
+		results := &db.PolledOutputs{}
+
+		for _, log := range logs {
+			switch log.Topics[0] {
+			case CreateSignature:
+				out := &CreateEvent{}
+				err := lightningABI.Unpack(out, "Create", log.Data)
+				if err != nil {
+					csLog.Errorw("failed to unpack event", "err", err.Error())
+					continue
+				}
+
+				results.New = append(results.New, &db.ETHOutput{
+					ID: out.Id,
+					ContractAddress: log.Address,
+					Amount: out.Value,
+					BlockNumber: log.BlockNumber,
+					TxHash: log.TxHash,
+					Script: out.Script,
+					Type: uint8(out.Script[0]),
+					IsSpent: false,
+					IsWithdrawn: false,
+				})
+			default:
+				csLog.Infow("received unknown event", log.Topics[0].Hex())
+			}
+		}
+
+		err = c.db.Outputs.SavePoll(results, confirmedBlockHeight)
+		if err != nil {
+			csLog.Errorw("failed to save poll", "err", err.Error())
+			continue
+		}
+
+		csLog.Infow("finished poll", "blockHeight", confirmedBlockHeight)
 		c.lastBlock = confirmedBlockHeight
 	}
 }

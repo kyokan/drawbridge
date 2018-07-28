@@ -9,22 +9,22 @@ import (
 	"context"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/rpc"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/kyokan/drawbridge/internal/wallet"
 	"github.com/kyokan/drawbridge/pkg/crypto"
+	"github.com/kyokan/drawbridge/internal/conv"
 )
 
 type DepositResult struct {
 }
 
 type Client struct {
-	keyManager   *wallet.KeyManager
-	rpc          *rpc.Client
-	client       *ethclient.Client
-	lightning    *contracts.LightningERC20
-	token        *contracts.ERC20
-	utxoAddress  common.Address
-	erc20Address common.Address
+	keyManager       *wallet.KeyManager
+	rpc              *rpc.Client
+	client           *ethclient.Client
+	lightning        *contracts.LightningERC20
+	token            *contracts.ERC20
+	lightningAddress common.Address
+	erc20Address     common.Address
 }
 
 type DepositMultisigOpts struct {
@@ -36,64 +36,62 @@ type DepositMultisigOpts struct {
 }
 
 func NewClient(keyManager *wallet.KeyManager, url string, address string) (*Client, error) {
-	utxoAddress := common.HexToAddress(address)
-
+	lightningAddress := common.HexToAddress(address)
 	r, err := rpc.DialContext(context.Background(), url)
-
 	if err != nil {
 		return nil, err
 	}
 
 	conn := ethclient.NewClient(r)
-
-	utxoContract, err := contracts.NewLightningERC20(utxoAddress, conn)
-
+	lightning, err := contracts.NewLightningERC20(lightningAddress, conn)
 	if err != nil {
 		return nil, err
 	}
 
-	tokenContractAddress, err := utxoContract.TokenAddress(nil)
-
+	tokenContractAddress, err := lightning.TokenAddress(nil)
 	if err != nil {
 		return nil, err
 	}
 
 	erc20Contract, err := contracts.NewERC20(tokenContractAddress, conn)
-
 	if err != nil {
 		return nil, err
 	}
 
 	wrapped := &Client{
-		keyManager:   keyManager,
-		rpc:          r,
-		client:       conn,
-		lightning:    utxoContract,
-		token:        erc20Contract,
-		utxoAddress:  utxoAddress,
-		erc20Address: tokenContractAddress,
+		keyManager:       keyManager,
+		rpc:              r,
+		client:           conn,
+		lightning:        lightning,
+		token:            erc20Contract,
+		lightningAddress: lightningAddress,
+		erc20Address:     tokenContractAddress,
 	}
 
 	return wrapped, nil
 }
 
-func (c *Client) BlockHeight() (*big.Int, error) {
-	var hexRes string
-	err := c.rpc.Call(&hexRes, "eth_blockNumber")
-
+func (c *Client) BlockHeight() (uint64, error) {
+	var hex string
+	err := c.rpc.Call(&hex, "eth_blockNumber")
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 
-	return hexutil.DecodeBig(hexRes)
+	blockHeight, err := conv.HexToBig(hex)
+	if err != nil {
+		return 0, err
+	}
+
+	return blockHeight.Uint64(), err
 }
 
-func (c *Client) FilterContract(from *big.Int, to *big.Int) ([]ethtypes.Log, error) {
+func (c *Client) FilterContract(from uint64, to uint64) ([]ethtypes.Log, error) {
 	q := ethereum.FilterQuery{
-		FromBlock: from,
-		ToBlock:   to,
+		FromBlock: big.NewInt(int64(from)),
+		ToBlock:   big.NewInt(int64(to)),
 		Addresses: []common.Address{
-			c.utxoAddress,
+			c.lightningAddress,
 		},
 	}
 
@@ -105,7 +103,7 @@ func (c *Client) GetERC20Address() (common.Address) {
 }
 
 func (c *Client) ApproveERC20(tokens *big.Int) (*ethtypes.Transaction, error) {
-	return c.token.Approve(c.keyManager.NewTransactor(0), c.utxoAddress, tokens)
+	return c.token.Approve(c.keyManager.NewTransactor(0), c.lightningAddress, tokens)
 }
 
 func (c *Client) Deposit(tokens *big.Int) (*ethtypes.Transaction, error) {

@@ -8,18 +8,16 @@ import (
 	"github.com/kyokan/drawbridge/internal/api"
 	"github.com/kyokan/drawbridge/internal/logger"
 	"github.com/kyokan/drawbridge/internal/p2p"
-	"github.com/kyokan/drawbridge/pkg"
 	"github.com/kyokan/drawbridge/internal/db"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/btcsuite/btcd/btcec"
 	"crypto/ecdsa"
 	"github.com/kyokan/drawbridge/internal/wallet"
-	"github.com/kyokan/drawbridge/internal/channel"
 	"github.com/kyokan/drawbridge/internal/ethclient"
-	"github.com/kyokan/drawbridge/internal/lndclient"
-	"context"
 	dwcrypto "github.com/kyokan/drawbridge/pkg/crypto"
 	"github.com/kyokan/drawbridge/internal/protocol"
+	"github.com/kyokan/drawbridge/internal/lndclient"
+	"golang.org/x/net/context"
 )
 
 var log *zap.SugaredLogger
@@ -49,14 +47,21 @@ func Start() {
 		log.Panicw("failed to instantiate key manager", "err", err.Error())
 	}
 
-	eClient, err := ethclient.NewClient(km, stringFlag("eth-rpc-url"), stringFlag("contract-address"))
+	ethClient, err := ethclient.NewClient(km, stringFlag("eth-rpc-url"), stringFlag("contract-address"))
 	if err != nil {
 		log.Panicw("failed to instantiate ETH client", "err", err.Error())
 	}
 
-	chainHashes, err := pkg.NewChainHashes()
+	lndClientConfig := &lndclient.LNDClientConfig{
+		Host:         stringFlag("lnd-host"),
+		Port:         stringFlag("lnd-port"),
+		CertFile:     stringFlag("lnd-cert-file"),
+		MacaroonFile: stringFlag("lnd-macaroon-file"),
+		Context:      context.TODO(),
+	}
+	lndClient, err := lndclient.NewClient(lndClientConfig)
 	if err != nil {
-		log.Panicw("failed to generate chain hashes", "err", err.Error())
+		log.Panicw("failed to connect to lnd", "err", err.Error())
 	}
 
 	database, err := db.NewDB(databaseUrl)
@@ -69,27 +74,6 @@ func Start() {
 		log.Panicw("failed to connect to the database", "err", err.Error())
 	}
 
-	config := &pkg.Config{
-		ChainHashes:    chainHashes,
-		P2PAddr:        stringFlag("p2p-ip"),
-		P2PPort:        stringFlag("p2p-port"),
-		BootstrapPeers: viper.GetStringSlice("bootstrap-peers"),
-		SigningPubkey:  km.PublicKey(),
-	}
-
-	lndClientConfig := &lndclient.LNDClientConfig{
-		Host:         stringFlag("lnd-host"),
-		Port:         stringFlag("lnd-port"),
-		CertFile:     stringFlag("lnd-cert-file"),
-		MacaroonFile: stringFlag("lnd-macaroon-file"),
-		Context:      context.TODO(),
-	}
-
-	lndClient, err := lndclient.NewClient(lndClientConfig)
-	if err != nil {
-		log.Panicw("failed to connect to lnd", "err", err.Error())
-	}
-
 	info, err := lndClient.GetInfo()
 	if err != nil {
 		log.Panicw("failed to connect to lnd", "err", err.Error())
@@ -97,12 +81,17 @@ func Start() {
 
 	peerBook := p2p.NewPeerBook()
 
-	cMgr := channel.NewFundingManager(peerBook, database, km, eClient, config)
+	chanHandler := protocol.NewChannelHandler(
+		peerBook,
+		km,
+		ethClient,
+		database,
+	)
 
 	reactor := p2p.NewReactor([]p2p.MsgHandler{
-		cMgr,
 		&protocol.PingPongHandler{},
 		protocol.NewHandshakeHandler(lndClient),
+		chanHandler,
 	})
 
 	lndIdentity, err := dwcrypto.PublicFromCompressedHex("0x" + info.IdentityPubkey)
@@ -121,7 +110,7 @@ func Start() {
 	})
 
 	container := &api.ServiceContainer{
-		FundingService: api.NewFundingService(eClient, cMgr),
+		FundingService: api.NewFundingService(ethClient, chanHandler),
 	}
 
 	if err != nil {
@@ -130,7 +119,7 @@ func Start() {
 
 	go reactor.Run()
 
-	chainsaw := ethclient.NewChainsaw(eClient, database)
+	chainsaw := ethclient.NewChainsaw(ethClient, database)
 
 	go (func() {
 		chainsaw.Start()
