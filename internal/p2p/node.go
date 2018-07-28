@@ -4,12 +4,11 @@ import (
 	"go.uber.org/zap"
 	"github.com/kyokan/drawbridge/internal/logger"
 	"net"
-	"github.com/roasbeef/btcd/connmgr"
+	"github.com/btcsuite/btcd/connmgr"
 	"time"
 	"sync"
 	"errors"
-	"github.com/kyokan/drawbridge/pkg"
-	"github.com/roasbeef/btcd/btcec"
+	"github.com/btcsuite/btcd/btcec"
 	"github.com/lightningnetwork/lnd/brontide"
 	"github.com/lightningnetwork/lnd/lnwire"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -29,15 +28,29 @@ type Node struct {
 	bootstrapPeers []string
 	addr           string
 	port           string
+	lndIdentity    *crypto.PublicKey
+	lndHost        string
 }
 
-func NewNode(reactor *Reactor, peerBook *PeerBook, config *pkg.Config) (*Node, error) {
+type NodeConfig struct {
+	Reactor        *Reactor
+	PeerBook       *PeerBook
+	P2PAddr        string
+	P2PPort        string
+	BootstrapPeers []string
+	LNDIdentity    *crypto.PublicKey
+	LNDHost        string
+}
+
+func NewNode(config *NodeConfig) (*Node, error) {
 	return &Node{
-		reactor:        reactor,
-		peerBook:       peerBook,
+		reactor:        config.Reactor,
+		peerBook:       config.PeerBook,
+		bootstrapPeers: config.BootstrapPeers,
 		addr:           config.P2PAddr,
 		port:           config.P2PPort,
-		bootstrapPeers: config.BootstrapPeers,
+		lndIdentity:    config.LNDIdentity,
+		lndHost:        config.LNDHost,
 	}, nil
 }
 
@@ -127,7 +140,7 @@ func (n *Node) onConnection(req *connmgr.ConnReq, conn net.Conn) {
 	nLog.Infow("established outbound peer connection", "conn", peer.Identity.CompressedHex())
 
 	if n.peerBook.AddPeer(peer) {
-		peer.Start()
+		peer.Start(n.lndIdentity, n.lndHost)
 	}
 }
 
@@ -143,7 +156,7 @@ func (n *Node) onAccept(conn net.Conn) {
 	nLog.Infow("established inbound peer connection", "conn", peer.Identity.CompressedHex())
 
 	if n.peerBook.AddPeer(peer) {
-		peer.Start()
+		peer.Start(n.lndIdentity, n.lndHost)
 	}
 }
 

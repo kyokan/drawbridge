@@ -45,17 +45,19 @@ contract LightningERC20 {
     
     event Withdrawal(address owner, uint value);
     
-    event NewOutput(uint value, uint blockNum, bytes script, uint id);
+    event Create(uint value, uint blockNum, bytes script, uint id);
     
-    event DebugBytes(bytes b);
+    event Spend(uint id);
     
-    event DebugBytes32(bytes32 b);
-    
-    event DebugUint(uint b);
-    
-    event DebugAddress(address a);
-    
-    event DebugBytes1(bytes1 a);
+//    event DebugBytes(bytes b);
+//
+//    event DebugBytes32(bytes32 b);
+//
+//    event DebugUint(uint b);
+//
+//    event DebugAddress(address a);
+//
+//    event DebugBytes1(bytes1 a);
     
     constructor(address _tokenAddress) public {
         tokenAddress = _tokenAddress;
@@ -79,7 +81,7 @@ contract LightningERC20 {
         );
         
         outputs[out.id] = out;
-        emitNewOutput(out);
+        emitCreate(out);
     }
     
     function withdraw(bytes witness, address payer) public {
@@ -119,7 +121,7 @@ contract LightningERC20 {
             );
 
             outputs[out.id] = out;
-            emitNewOutput(out);
+            emitCreate(out);
         }
 
         require(totalInputValue == totalOutputValue);
@@ -141,6 +143,7 @@ contract LightningERC20 {
             require(isSpendable(input, witness, outputScripts));
             totalInputValue += input.value;
             delete outputs[input.id];
+            emit Spend(input.id);
         }
         
         return totalInputValue;
@@ -161,8 +164,8 @@ contract LightningERC20 {
         return buf.data;
     }
     
-    function emitNewOutput(Output out) private {
-        emit NewOutput(out.value, out.blockNum, out.script, out.id);
+    function emitCreate(Output out) private {
+        emit Create(out.value, out.blockNum, out.script, out.id);
     }
     
     function isSpendable(Output out, bytes witness, bytes outputScripts) private returns (bool) {
@@ -204,7 +207,6 @@ contract LightningERC20 {
     }
     
     function isLocalCommitSpendable(Output out, bytes witness, bytes outputScripts) private returns (bool) {
-        uint cursor = 0;
         bytes32 hash = keccak256(abi.encodePacked(uintToBytes(out.id), witness.slice(0, 1), outputScripts));
         bytes1 txType = witness[0];
         bytes memory sig = witness.slice(1, 65);

@@ -8,25 +8,21 @@ import (
 	"github.com/lightningnetwork/lnd/lnwire"
 	"github.com/kyokan/drawbridge/pkg"
 	"math"
-	"github.com/roasbeef/btcutil"
+	"github.com/btcsuite/btcutil"
 	"github.com/kyokan/drawbridge/internal/db"
-	"github.com/kyokan/drawbridge/internal/eth"
-	btcwire "github.com/roasbeef/btcd/wire"
+	"github.com/kyokan/drawbridge/internal/ethclient"
 	"github.com/kyokan/drawbridge/pkg/crypto"
-	"github.com/kyokan/drawbridge/pkg/wire"
-	"fmt"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 )
 
 type FundingManager struct {
 	peerBook *p2p.PeerBook
 	db       *db.DB
 	km       *wallet.KeyManager
-	client   *eth.Client
+	client   *ethclient.Client
 	config   *pkg.Config
 }
 
-func NewFundingManager(peerBook *p2p.PeerBook, db *db.DB, km *wallet.KeyManager, client *eth.Client, config *pkg.Config) *FundingManager {
+func NewFundingManager(peerBook *p2p.PeerBook, db *db.DB, km *wallet.KeyManager, client *ethclient.Client, config *pkg.Config) *FundingManager {
 	return &FundingManager{
 		peerBook: peerBook,
 		db:       db,
@@ -117,145 +113,17 @@ func (m *FundingManager) Accept(msg lnwire.Message) (lnwire.Message, error) {
 }
 
 func (m *FundingManager) onOpenChannel(open *lnwire.OpenChannel) (*lnwire.AcceptChannel, error) {
-	commitmentSeed, firstCommitmentPoint, err := wallet.FirstCommitmentPoint()
-
-	if err != nil {
-		return nil, err
-	}
-
-	signingKey := m.config.SigningPubkey.BTCEC()
-
-	accept := &lnwire.AcceptChannel{
-		PendingChannelID:     open.PendingChannelID,
-		DustLimit:            open.DustLimit,
-		MaxValueInFlight:     open.MaxValueInFlight,
-		ChannelReserve:       open.ChannelReserve,
-		HtlcMinimum:          open.HtlcMinimum,
-		MinAcceptDepth:       7,
-		CsvDelay:             open.CsvDelay,
-		MaxAcceptedHTLCs:     open.MaxAcceptedHTLCs,
-		FundingKey:           signingKey,
-		RevocationPoint:      signingKey,
-		PaymentPoint:         signingKey,
-		DelayedPaymentPoint:  signingKey,
-		HtlcPoint:            signingKey,
-		FirstCommitmentPoint: firstCommitmentPoint,
-	}
-
-	err = m.db.Channels.CreateRemoteChannel(open, accept, commitmentSeed)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return accept, nil
+	return nil, nil
 }
 
 func (m *FundingManager) onAcceptChannel(msg *lnwire.AcceptChannel) (*lnwire.FundingCreated, error) {
-	err := m.db.Channels.AcceptLocalChannel(msg)
-
-	if err != nil {
-		return nil, err
-	}
-
-	ch, err := m.db.Channels.GetPendingChannel(msg.PendingChannelID)
-
-	if err != nil {
-		return nil, err
-	}
-
-	ourAddr := ch.OurFundingAddress.ETHAddress()
-	theirAddr := ch.TheirFundingAddress.ETHAddress()
-	input, err := m.db.UTXOs.FindSpendableByOwnerAmount(ch.FundingAmount, ourAddr)
-
-	if err != nil {
-		return nil, err
-	}
-
-	multisig := wire.NewMultisig(input.ID, ourAddr, theirAddr)
-	multisigId := multisig.ID()
-	multisigHash := multisig.Hash()
-
-	fmt.Println(hexutil.Encode(multisigId[:]), hexutil.Encode(multisigHash[:]))
-
-	err = m.db.Channels.FinalizeChannelId(msg.PendingChannelID, multisigId, input.ID[:])
-
-	if err != nil {
-		return nil, err
-	}
-
-	sig, err := m.km.SignData(multisigHash[:])
-
-	if err != nil {
-		return nil, err
-	}
-
-	err = m.db.Channels.FinalizeChannelSignatures(multisigId, sig, nil)
-
-	return &lnwire.FundingCreated{
-		PendingChannelID: msg.PendingChannelID,
-		FundingPoint: btcwire.OutPoint{
-			Hash:  multisigId,
-			Index: 0,
-		},
-		CommitSig: sig.Wire(),
-	}, nil
+	return nil, nil
 }
 
 func (m *FundingManager) onFundingCreated(msg *lnwire.FundingCreated) (*lnwire.FundingSigned, error) {
-	err := m.db.Channels.FinalizeChannelId(msg.PendingChannelID, msg.FundingPoint.Hash, nil)
-
-	if err != nil {
-		return nil, err
-	}
-
-	sig, err := m.km.SignData(msg.FundingPoint.Hash[:])
-
-	if err != nil {
-		return nil, err
-	}
-
-	err = m.db.Channels.FinalizeChannelSignatures(msg.FundingPoint.Hash, sig.Bytes(), crypto.SignatureFromWire(msg.CommitSig))
-
-	return &lnwire.FundingSigned{
-		ChanID:    [32]byte(msg.FundingPoint.Hash),
-		CommitSig: sig.Wire(),
-	}, nil
+	return nil, nil
 }
 
 func (m *FundingManager) onFundingSigned(msg *lnwire.FundingSigned) (*lnwire.FundingLocked, error) {
-	err := m.db.Channels.FinalizeChannelSignatures(msg.ChanID, nil, crypto.SignatureFromWire(msg.CommitSig))
-
-	if err != nil {
-		return nil, err
-	}
-
-	ch, err := m.db.Channels.GetFinalizedChannel(msg.ChanID)
-
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = m.client.DepositMultisig(&eth.DepositMultisigOpts{
-		InputID: ch.InputID,
-		OurAddress: ch.OurFundingAddress.ETHAddress(),
-		TheirAddress: ch.TheirFundingAddress.ETHAddress(),
-		OurSignature: ch.OurSignature,
-		TheirSignature: ch.TheirSignature,
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	next, err := crypto.RandomPublicKey()
-
-	if err != nil {
-		return nil, err
-	}
-
-	return &lnwire.FundingLocked{
-		ChanID: msg.ChanID,
-		NextPerCommitmentPoint: next.BTCEC(),
-	}, nil
+	return nil, nil
 }

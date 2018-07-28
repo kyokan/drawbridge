@@ -11,6 +11,7 @@ import (
 	"sync"
 	"github.com/lightningnetwork/lnd/brontide"
 	"github.com/kyokan/drawbridge/pkg/crypto"
+	"github.com/kyokan/drawbridge/pkg/wire"
 )
 
 var pLog *zap.SugaredLogger
@@ -57,16 +58,14 @@ func NewPeer(reactor *Reactor, conn *brontide.Conn, selfOriginated bool) (*Peer,
 	}, nil
 }
 
-func (p *Peer) Start() {
+func (p *Peer) Start(lndIdent *crypto.PublicKey, lndHost string) {
 	p.reactor.AddEnvelopeChan(p.incomingQueue, p.outgoingQueue)
 
 	go p.readHandler()
 	go p.writeHandler()
 	go p.pingHandler()
 
-	globalFeats := lnwire.NewRawFeatureVector()
-	localFeats := lnwire.NewRawFeatureVector()
-	msg := lnwire.NewInitMessage(globalFeats, localFeats)
+	msg := wire.NewInit(lndIdent, lndHost)
 	p.outgoingQueue <- NewEnvelope(p, msg)
 }
 
@@ -164,7 +163,7 @@ func (p *Peer) readMessage() (lnwire.Message, error) {
 		return nil, err
 	}
 
-	msg, err := lnwire.ReadMessage(bytes.NewReader(rawMsg), 0)
+	msg, err := wire.ReadMessage(bytes.NewReader(rawMsg), 0)
 
 	if err != nil {
 		return nil, err
@@ -175,7 +174,7 @@ func (p *Peer) readMessage() (lnwire.Message, error) {
 
 func (p *Peer) writeMessage(msg lnwire.Message) error {
 	b := bytes.NewBuffer(p.writeBuf[0:0:len(p.writeBuf)])
-	_, err := lnwire.WriteMessage(b, msg, 0)
+	_, err := wire.WriteMessage(b, msg)
 
 	if err != nil {
 		return err

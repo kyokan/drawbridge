@@ -3,16 +3,16 @@ package conv
 import (
 	"math/big"
 	"errors"
+	"github.com/ethereum/go-ethereum/common/math"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 )
 
-var WeiPerSatoshi = big.NewInt(10000000000)
-
-func SatoshiToWei(sats *big.Int) *big.Int {
-	return sats.Mul(sats, WeiPerSatoshi)
-}
-
-func WeiToSatoshi(wei *big.Int) *big.Int {
-	return wei.Div(wei, WeiPerSatoshi)
+func HexToBig(hex string) (*big.Int, error) {
+	num, ok := math.ParseBig256(hex)
+	if !ok {
+		return nil, errors.New("invalid hex")
+	}
+	return num, nil
 }
 
 func StringToBig(num string) (*big.Int, error) {
@@ -23,4 +23,21 @@ func StringToBig(num string) (*big.Int, error) {
 	}
 
 	return out, nil
+}
+
+func BytesToBig(b []byte) (*big.Int, error) {
+	hex := hexutil.Encode(b)
+	num, ok := math.ParseBig256(hex)
+	if !ok {
+		return nil, errors.New("invalid bignum")
+	}
+	return num, nil
+}
+
+func BigToBytes(n *big.Int) []byte {
+	return math.PaddedBigBytes(math.U256(n), 32)
+}
+
+func BigToHex(n *big.Int) string {
+	return hexutil.Encode(BigToBytes(n))
 }

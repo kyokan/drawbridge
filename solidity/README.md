@@ -54,11 +54,25 @@ Outputs are spent by providing a set of signed witness and output scripts to the
 		- [`1: 0x00 if to delayed, 0x01 if revocation`]
 		- [`65: revocation or delayed signature`]
 
+### Offered HTLCs
+
+- Locking script:
+	- prefix: `0x04`
+	- data:
+		- [`20: revocation address`]
+		- [`20: remote address`]
+		- [`20: local address`]
+		- [`32: payment hash`]
+- Witness script:
+	- data:
+		- [`1: 0x00 if redemption, 0x01 if revocation, 0x02 if timeout`]
+		- [`32 (only if redemption): preimage`]
+		- [`65: signature`]
+
 ### Output Generation
 
 To create an output for use in the `spend` method, concatenate the following data:
 
-- [`32: lock time`]
 - [`32: value`]
 - [`1: locking script prefix`]
 - [`n: locking script`]

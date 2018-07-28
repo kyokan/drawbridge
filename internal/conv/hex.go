@@ -3,6 +3,7 @@ package conv
 import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/go-errors/errors"
+	"strings"
 )
 
 func HexToBytes32(hex string) ([32]byte, error) {
@@ -19,4 +20,8 @@ func HexToBytes32(hex string) ([32]byte, error) {
 
 	copy(out[:], b)
 	return out, nil
+}
+
+func Strip0x(hex string) string {
+	return strings.Replace(hex, "0x", "", 1)
 }

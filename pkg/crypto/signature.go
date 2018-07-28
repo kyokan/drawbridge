@@ -1,33 +1,10 @@
 package crypto
 
 import (
-	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/go-errors/errors"
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
 type Signature []byte
-
-func SignatureFromWire(wire [64]byte) Signature {
-	var b = make([]byte, 65)
-	copy(b, wire[:])
-	b[64] = 0
-	return b
-}
-
-func SignatureFromHex(hex string) (Signature, error) {
-	b, err := hexutil.Decode(hex)
-
-	if err != nil {
-		return nil, err
-	}
-
-	if len(b) != 65 {
-		return nil, errors.New("length of signature must be 65")
-	}
-
-	return b, nil
-}
 
 func (s Signature) Bytes() ([]byte) {
 	return s

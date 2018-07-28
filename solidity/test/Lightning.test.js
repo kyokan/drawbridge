@@ -34,7 +34,7 @@ contract('LightningERC20', (accounts) => {
         log = res.logs[0].args;
       });
 
-      it('should emit a NewOutput event', async () => {
+      it('should emit a Create event', async () => {
         assert.strictEqual(log.value.toNumber(), depositedTokens);
         assert.isNumber(log.blockNum.toNumber());
         assert.strictEqual(log.script, '0x01627306090abab3a6e1400e9345bc60c78a8bef57');
@@ -70,7 +70,7 @@ contract('LightningERC20', (accounts) => {
     const sentAmount = 1000;
 
     describe('on success with change', () => {
-      let spent;
+      let sent;
 
       let change;
 
@@ -88,15 +88,15 @@ contract('LightningERC20', (accounts) => {
           outputs
         );
 
-        spent = res.logs[0].args;
-        change = res.logs[1].args;
+        sent = res.logs[1].args;
+        change = res.logs[2].args;
       });
 
-      it('should emit the correct NewOutput events', () => {
-        assert.strictEqual(spent.value.toNumber(), sentAmount);
-        assert.isNumber(spent.blockNum.toNumber());
-        assert.strictEqual(spent.script, '0x01f17f52151ebef6c7334fad080c5704d77216b732');
-        assert.strictEqual(spent.id.toNumber(), 3);
+      it('should emit the correct Create events', () => {
+        assert.strictEqual(sent.value.toNumber(), sentAmount);
+        assert.isNumber(sent.blockNum.toNumber());
+        assert.strictEqual(sent.script, '0x01f17f52151ebef6c7334fad080c5704d77216b732');
+        assert.strictEqual(sent.id.toNumber(), 3);
 
         assert.strictEqual(change.value.toNumber(), mintedTokens - sentAmount);
         assert.isNumber(change.blockNum.toNumber());
@@ -105,7 +105,7 @@ contract('LightningERC20', (accounts) => {
       });
 
       it('should store the correct Output', async () => {
-        const spentOut = parseOutputStruct(await lightningContract.outputs.call(spent.id));
+        const spentOut = parseOutputStruct(await lightningContract.outputs.call(sent.id));
         assert.strictEqual(spentOut.value, sentAmount);
         assert.isNumber(spentOut.blockNum);
         assert.strictEqual(spentOut.script, '0x01f17f52151ebef6c7334fad080c5704d77216b732');
@@ -120,7 +120,7 @@ contract('LightningERC20', (accounts) => {
     });
 
     describe('on success without change', () => {
-      let spent;
+      let sent;
 
       before(async () => {
         let res = await lightningContract.deposit(mintedTokens);
@@ -130,18 +130,18 @@ contract('LightningERC20', (accounts) => {
           await createPayableWitness(inputId, accounts[0], output),
           output
         );
-        spent = res.logs[0].args;
+        sent = res.logs[1].args;
       });
 
-      it('should emit the correct NewOutput event', () => {
-        assert.strictEqual(spent.value.toNumber(), mintedTokens);
-        assert.isNumber(spent.blockNum.toNumber());
-        assert.strictEqual(spent.script, '0x01f17f52151ebef6c7334fad080c5704d77216b732');
-        assert.strictEqual(spent.id.toNumber(), 6);
+      it('should emit the correct Create event', () => {
+        assert.strictEqual(sent.value.toNumber(), mintedTokens);
+        assert.isNumber(sent.blockNum.toNumber());
+        assert.strictEqual(sent.script, '0x01f17f52151ebef6c7334fad080c5704d77216b732');
+        assert.strictEqual(sent.id.toNumber(), 6);
       });
 
       it('should store the correct utxos', async () => {
-        const spentOut = parseOutputStruct(await lightningContract.outputs.call(spent.id));
+        const spentOut = parseOutputStruct(await lightningContract.outputs.call(sent.id));
         assert.strictEqual(spentOut.value, mintedTokens);
         assert.isNumber(spentOut.blockNum);
         assert.strictEqual(spentOut.script, '0x01f17f52151ebef6c7334fad080c5704d77216b732');
@@ -177,7 +177,7 @@ contract('LightningERC20', (accounts) => {
     });
 
     describe('funding a multisig', () => {
-      let spent;
+      let sent;
 
       let change;
 
@@ -195,11 +195,11 @@ contract('LightningERC20', (accounts) => {
           outputs
         );
 
-        spent = res.logs[0].args;
-        change = res.logs[1].args;
+        sent = res.logs[1].args;
+        change = res.logs[2].args;
 
         const multisig = createMultisigOutput(mintedTokens, accounts[0], accounts[1]);
-        const inputA = await createPayableWitness(spent.id, accounts[1], multisig);
+        const inputA = await createPayableWitness(sent.id, accounts[1], multisig);
         const inputB = await createPayableWitness(change.id, accounts[0], multisig);
         const inputs = concatOutputs(inputA, inputB);
 
@@ -208,10 +208,10 @@ contract('LightningERC20', (accounts) => {
           multisig
         );
 
-        multi = res.logs[0].args;
+        multi = res.logs[2].args;
       });
 
-      it('should emit the correct NewOutput event', () => {
+      it('should emit the correct Create event', () => {
         assert.strictEqual(multi.value.toNumber(), mintedTokens);
         assert.isNumber(multi.blockNum.toNumber());
         assert.strictEqual(multi.script, `0x02${strip0x(accounts[0])}${strip0x(accounts[1])}`);
@@ -289,11 +289,10 @@ contract('LightningERC20', (accounts) => {
         ]);
 
         const res = await lightningContract.spend('0x' + inputBuf.toString('hex'), outputs);
-
-        assert.strictEqual(res.logs[0].event, 'NewOutput');
-        assert.strictEqual(res.logs[1].event, 'NewOutput');
-        assert.strictEqual(res.logs[0].args.value.toNumber(), mintedTokens - 100);
-        assert.strictEqual(res.logs[1].args.value.toNumber(), 100);
+        assert.strictEqual(res.logs[1].event, 'Create');
+        assert.strictEqual(res.logs[2].event, 'Create');
+        assert.strictEqual(res.logs[1].args.value.toNumber(), mintedTokens - 100);
+        assert.strictEqual(res.logs[2].args.value.toNumber(), 100);
       });
     });
 
@@ -311,7 +310,7 @@ contract('LightningERC20', (accounts) => {
           output
         );
 
-        commitment = res.logs[0].args;
+        commitment = res.logs[1].args;
       });
 
       it('should not be spendable by the delayed key for locktime blocks', async () => {
@@ -344,8 +343,8 @@ contract('LightningERC20', (accounts) => {
         }
 
         const res = await lightningContract.spend('0x' + inputBuf.toString('hex'), output);
-        assert.strictEqual(res.logs[0].event, 'NewOutput');
-        assert.strictEqual(res.logs[0].args.value.toNumber(), mintedTokens);
+        assert.strictEqual(res.logs[1].event, 'Create');
+        assert.strictEqual(res.logs[1].args.value.toNumber(), mintedTokens);
       });
 
       it('should be spendable by the revocation key at any time', async () => {
@@ -371,8 +370,8 @@ contract('LightningERC20', (accounts) => {
         ]);
 
         const res = await lightningContract.spend('0x' + inputBuf.toString('hex'), output);
-        assert.strictEqual(res.logs[0].event, 'NewOutput');
-        assert.strictEqual(res.logs[0].args.value.toNumber(), mintedTokens);
+        assert.strictEqual(res.logs[1].event, 'Create');
+        assert.strictEqual(res.logs[1].args.value.toNumber(), mintedTokens);
       });
     });
   });
@@ -382,7 +381,7 @@ contract('LightningERC20', (accounts) => {
 
     let change;
 
-    let spent;
+    let sent;
 
     beforeEach(async () => {
       await tokenContract.mint(accounts[2], mintedTokens);
@@ -401,13 +400,13 @@ contract('LightningERC20', (accounts) => {
         await createPayableWitness(dep.logs[0].args.id, accounts[2], outputs),
         outputs
       );
-      spent = res.logs[0].args;
-      change = res.logs[1].args;
+      sent = res.logs[1].args;
+      change = res.logs[2].args;
     });
 
     it('should credit the token holder', async () => {
       await lightningContract.withdraw(await createPayableWitness(change.id, accounts[2], ZERO_BYTES), accounts[2]);
-      await lightningContract.withdraw(await createPayableWitness(spent.id, accounts[3], ZERO_BYTES), accounts[3]);
+      await lightningContract.withdraw(await createPayableWitness(sent.id, accounts[3], ZERO_BYTES), accounts[3]);
       const changeBalance = await tokenContract.balanceOf.call(accounts[2]);
       const spentBalance = await tokenContract.balanceOf.call(accounts[3]);
       assert.strictEqual(changeBalance.toNumber(), 99000);

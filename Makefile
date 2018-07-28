@@ -23,12 +23,12 @@ compile-extract-abi:
 
 abigen: compile-contracts compile-extract-abi
 	mkdir -p ./build/abi
-	./build/extract-abi --contracts ./solidity/build/contracts/UTXOToken.json,./solidity/build/contracts/ERC20.json --output-dir ./build/abi
-	abigen --abi ./build/abi/UTXOToken.json --pkg contracts --type UTXOToken --out ./pkg/contracts/utxo_token.go
+	./build/extract-abi --contracts ./solidity/build/contracts/LightningERC20.json,./solidity/build/contracts/ERC20.json --output-dir ./build/abi
+	abigen --abi ./build/abi/LightningERC20.json --pkg contracts --type LightningERC20 --out ./pkg/contracts/lighting_erc20.go
 	abigen --abi ./build/abi/ERC20.json --pkg contracts --type ERC20 --out ./pkg/contracts/erc20.go
 
 compile: abigen
-	go build -o ./build/drawbridge ./cmd/drawbridge.go
+	go build -gcflags='-N -l' -o ./build/drawbridge ./cmd/drawbridge.go
 
 dep:
 	dep ensure -v
@@ -43,3 +43,6 @@ clean:
 
 start: compile
 	./build/drawbridge --config ./local-config.yml
+
+make start-debug: compile
+	dlv --listen=:2345 --headless=true --api-version=2 exec ./build/drawbridge -- --config ./local-config.yml

@@ -2,7 +2,7 @@ package wallet
 
 import (
 	"github.com/lightningnetwork/lnd/shachain"
-	"github.com/roasbeef/btcd/btcec"
+	"github.com/btcsuite/btcd/btcec"
 	"github.com/lightningnetwork/lnd/lnwallet"
 	"crypto/rand"
 )

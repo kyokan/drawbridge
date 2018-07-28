@@ -1,7 +1,7 @@
 package api
 
 import (
-	"github.com/kyokan/drawbridge/internal/eth"
+	"github.com/kyokan/drawbridge/internal/ethclient"
 	"net/http"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"go.uber.org/zap"
@@ -17,11 +17,11 @@ func init() {
 }
 
 type FundingService struct {
-	client *eth.Client
+	client *ethclient.Client
 	cMgr   *channel.FundingManager
 }
 
-func NewFundingService(client *eth.Client, cMgr *channel.FundingManager) (*FundingService) {
+func NewFundingService(client *ethclient.Client, cMgr *channel.FundingManager) (*FundingService) {
 	return &FundingService{
 		client: client,
 		cMgr:   cMgr,

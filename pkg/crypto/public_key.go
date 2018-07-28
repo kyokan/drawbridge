@@ -6,7 +6,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"crypto/elliptic"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/roasbeef/btcd/btcec"
+	"github.com/btcsuite/btcd/btcec"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/go-errors/errors"
 	"crypto/rand"
@@ -34,15 +34,7 @@ func PublicFromCompressedHex(hex string) (*PublicKey, error) {
 		return nil, err
 	}
 
-	backing, err := btcec.ParsePubKey(b, btcec.S256())
-
-	if err != nil {
-		return nil, err
-	}
-
-	return &PublicKey{
-		backing: backing.ToECDSA(),
-	}, nil
+	return PublicFromBytes(b)
 }
 
 func PublicFromOtherPublic(pub gocrypto.PublicKey) (*PublicKey, error) {
@@ -57,6 +49,18 @@ func PublicFromOtherPublic(pub gocrypto.PublicKey) (*PublicKey, error) {
 	}, nil
 }
 
+func PublicFromBytes(data []byte) (*PublicKey, error) {
+	backing, err := btcec.ParsePubKey(data[:], btcec.S256())
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &PublicKey{
+		backing: backing.ToECDSA(),
+	}, nil
+}
+
 func PublicFromBTCEC(pub *btcec.PublicKey) (*PublicKey, error) {
 	return &PublicKey{
 		backing: pub.ToECDSA(),
@@ -67,6 +71,10 @@ func (p *PublicKey) ETHAddress() (common.Address) {
 	pubBytes := elliptic.Marshal(btcec.S256(), p.backing.X, p.backing.Y)
 	addrBytes := crypto.Keccak256(pubBytes[1:])[12:]
 	return common.BytesToAddress(addrBytes)
+}
+
+func (p *PublicKey) SerializeCompressed() ([]byte) {
+	return p.BTCEC().SerializeCompressed()
 }
 
 func (p *PublicKey) CompressedHex() string {

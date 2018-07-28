@@ -108,9 +108,5 @@ func (r *Reactor) handle(envelope *Envelope) lnwire.Message {
 		return nil
 	}
 
-	if res == nil {
-		rLog.Warnw("no response for message", "msgType", msg.MsgType().String())
-	}
-
 	return res
 }
